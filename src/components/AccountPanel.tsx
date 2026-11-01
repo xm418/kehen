@@ -52,7 +52,7 @@ export function AccountPanel() {
 
   const run = async (kind: 'login' | 'register') => {
     if (endpointMissing) {
-      setError('安装包里没有同源的 /api，先在上面填完整地址，例如 http://182.244.118.248:8787/api')
+      setError('安装包里没有同源的 /api，先在上面填完整地址，例如 http://192.168.0.101:8787/api')
       return
     }
     setBusy(true)
@@ -70,7 +70,7 @@ export function AccountPanel() {
 
   const syncNow = async () => {
     if (endpointMissing) {
-      setError('安装包里没有同源的 /api，先在上面填完整地址，例如 http://182.244.118.248:8787/api')
+      setError('安装包里没有同源的 /api，先在上面填完整地址，例如 http://192.168.0.101:8787/api')
       return
     }
     setBusy(true)
@@ -262,7 +262,7 @@ export function AccountPanel() {
           {endpointMissing ? (
             <div className="card-sub" style={{ color: 'var(--ink)', lineHeight: 1.8 }}>
               安装包里没有同源的 /api，必须填完整地址（电脑和手机要在同一个能连通的网络里），例如
-              http://182.244.118.248:8787/api
+              http://192.168.0.101:8787/api
             </div>
           ) : null}
 

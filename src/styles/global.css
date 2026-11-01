@@ -225,7 +225,6 @@ a {
   padding: 14px 16px 10px;
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
 }
 
 .mobile-head h1 {

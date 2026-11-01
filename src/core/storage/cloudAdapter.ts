@@ -35,10 +35,22 @@ export function endpointReady(endpoint?: string): boolean {
   return !!(endpoint ?? '').trim() || !Capacitor.isNativePlatform()
 }
 
-export const ENDPOINT_HINT = '先在「账号与同步」里填上服务器地址，例如 http://182.244.118.248:8787/api'
+export const ENDPOINT_HINT = '先在「账号与同步」里填上服务器地址，例如 http://192.168.0.101:8787/api'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 10000)
+  let res: Response
+  try {
+    res = await fetch(url, { ...init, signal: ctrl.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('连不上服务器（10 秒无响应）。请用手机浏览器打开服务器地址试试，打不开说明手机没和电脑连在同一个 Wi-Fi')
+    }
+    throw new Error('连不上服务器。请确认手机和电脑在同一个 Wi-Fi，地址没填错')
+  } finally {
+    clearTimeout(timer)
+  }
   const text = await res.text()
   let body: unknown = null
   try {
