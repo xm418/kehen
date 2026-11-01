@@ -56,10 +56,10 @@ export async function applyDailyReminder(hour: number): Promise<void> {
 const BACKUP_REMINDER_ID = 2
 
 /**
- * 每周日 20:00 提醒导出一次备份。
- * 数据只在设备本机，卸载或清数据就找不回来，所以固定一周提醒一次。
+ * 距离上次导出超过 7 天才提醒一次；刚导出过不会被催。
+ * 只调度一条一次性通知，打开 App 时按最新的导出时间重排。
  */
-export async function applyBackupReminder(enabled: boolean): Promise<void> {
+export async function applyBackupReminder(enabled: boolean, lastExportedAt?: string): Promise<void> {
   if (!isNativeApp()) return
   const { LocalNotifications } = await import('@capacitor/local-notifications')
 
@@ -74,6 +74,25 @@ export async function applyBackupReminder(enabled: boolean): Promise<void> {
     const perm = await LocalNotifications.checkPermissions()
     if (perm.display !== 'granted') return
 
+    const at = new Date()
+    const last = lastExportedAt ? new Date(lastExportedAt) : null
+    if (last && !Number.isNaN(last.getTime())) {
+      at.setTime(last.getTime() + 7 * 24 * 60 * 60 * 1000)
+      at.setHours(20, 0, 0, 0)
+    } else {
+      // 从没导出过：下一个周日 20:00
+      at.setHours(20, 0, 0, 0)
+      at.setDate(at.getDate() + ((7 - at.getDay()) % 7))
+      if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 7)
+    }
+    // 已经逾期：改成明天 20:00，避免一打开 App 就弹
+    if (at.getTime() <= Date.now()) {
+      const t = new Date()
+      t.setDate(t.getDate() + 1)
+      t.setHours(20, 0, 0, 0)
+      at.setTime(t.getTime())
+    }
+
     await LocalNotifications.schedule({
       notifications: [
         {
@@ -81,8 +100,7 @@ export async function applyBackupReminder(enabled: boolean): Promise<void> {
           title: '刻痕 · 该备份了',
           body: '数据只存在这台设备，卸载或清数据就找不回来。设置 → 数据与备份 → 导出全部（JSON）。',
           channelId: CHANNEL_ID,
-          // weekday 1 表示周日
-          schedule: { on: { weekday: 1, hour: 20, minute: 0 }, repeats: true, allowWhileIdle: true },
+          schedule: { at, allowWhileIdle: true },
         },
       ],
     })

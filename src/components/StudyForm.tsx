@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react'
 import { Sheet, Field } from './Sheet'
 import { useStore } from '../state/store'
 import { todayKey } from '../core/date'
+import type { StudyLog } from '../core/types'
 
 export function StudyForm({
   open,
   onClose,
   defaultSubject,
+  log,
 }: {
   open: boolean
   onClose: () => void
   defaultSubject?: string
+  /** 传了就变成「修改这条记录」，不传是新增 */
+  log?: StudyLog
 }) {
   const { data, actions } = useStore()
   const [title, setTitle] = useState('')
@@ -20,20 +24,27 @@ export function StudyForm({
   const [tags, setTags] = useState('')
 
   useEffect(() => {
-    if (open) {
-      setTitle('')
-      setSubject(defaultSubject ?? data.settings.defaultFocusSubject)
-      setMinutes('30')
-      setContent('')
-      setTags('')
+    if (!open) return
+    if (log) {
+      setTitle(log.title)
+      setSubject(log.subject)
+      setMinutes(String(log.minutes))
+      setContent(log.content)
+      setTags(log.tags.join(', '))
+      return
     }
-  }, [open, defaultSubject, data.settings.defaultFocusSubject])
+    setTitle('')
+    setSubject(defaultSubject ?? data.settings.defaultFocusSubject)
+    setMinutes('30')
+    setContent('')
+    setTags('')
+  }, [open, log, defaultSubject, data.settings.defaultFocusSubject])
 
   const subjects = Array.from(new Set(data.studyLogs.map((l) => l.subject))).slice(0, 6)
 
   const submit = () => {
     if (!title.trim()) return
-    actions.addStudyLog({
+    const payload = {
       title,
       subject,
       minutes: Number(minutes) || 0,
@@ -42,13 +53,19 @@ export function StudyForm({
         .split(/[,，\s]+/)
         .map((t) => t.trim())
         .filter(Boolean),
-      date: todayKey(),
-    })
+    }
+    if (log) actions.updateStudyLog(log.id, payload)
+    else actions.addStudyLog({ ...payload, date: todayKey() })
     onClose()
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="记录这次学习" subtitle="记下来，之后会自动安排复习">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={log ? '修改这条记录' : '记录这次学习'}
+      subtitle={log ? '改完保存，复习安排不变' : '记下来，之后会自动安排复习'}
+    >
       <div className="stack">
         <Field label="学了什么">
           <input

@@ -39,6 +39,7 @@ export function NotesPage() {
   const [subject, setSubject] = useState<string>('全部')
   const [tag, setTag] = useState<string>('')
   const [detail, setDetail] = useState<StudyLog | null>(null)
+  const [editing, setEditing] = useState<StudyLog | null>(null)
 
   const due = dueReviews(data.studyLogs, today)
   const subjects = ['全部', ...Array.from(new Set(data.studyLogs.map((l) => l.subject)))]
@@ -210,6 +211,7 @@ export function NotesPage() {
       )}
 
       <StudyForm open={formOpen} onClose={() => setFormOpen(false)} />
+      <StudyForm open={!!editing} log={editing ?? undefined} onClose={() => setEditing(null)} />
 
       <Sheet
         open={!!detailLive}
@@ -242,6 +244,15 @@ export function NotesPage() {
                 : '这条内容已完成全部复习安排'}
             </div>
             <div className="row" style={{ gap: 8 }}>
+              <button
+                className="btn"
+                onClick={() => {
+                  setEditing(detailLive)
+                  setDetail(null)
+                }}
+              >
+                编辑
+              </button>
               {detailLive.nextReviewAt ? (
                 <button
                   className="btn btn-primary"

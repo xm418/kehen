@@ -20,6 +20,7 @@ export function ReviewPage() {
   const [goalOpen, setGoalOpen] = useState(false)
   const [krTarget, setKrTarget] = useState<Goal | null>(null)
   const [planGoal, setPlanGoal] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
 
   const weekStart = addDays(startOfWeek(today), weekOffset * 7)
   const metrics = useMemo(() => weekMetrics(data, weekStart), [data, weekStart])
@@ -30,6 +31,12 @@ export function ReviewPage() {
     ? Math.round((trendDays.reduce((a, d) => a + d.rate, 0) / trendDays.length) * 100)
     : null
   const savedWeek = data.weeklyReviews.find((r) => r.weekStart === weekStart)
+  // 历史复盘：周复盘 + 日复盘，新的在前
+  const weekHistory = [...data.weeklyReviews].sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1))
+  const dayHistory = [...data.dailyReviews].sort((a, b) => (a.date < b.date ? 1 : -1))
+  const historyCount = weekHistory.length + dayHistory.length
+  const shownWeeks = showHistory ? weekHistory : weekHistory.slice(0, 3)
+  const shownDays = showHistory ? dayHistory : dayHistory.slice(0, 3)
   const [summary, setSummary] = useState(savedWeek?.summary ?? '')
   const [adjusted, setAdjusted] = useState(savedWeek?.adjusted ?? '')
   const [summaryWeek, setSummaryWeek] = useState(weekStart)
@@ -370,6 +377,16 @@ export function ReviewPage() {
                           >
                             ＋
                           </button>
+                          <button
+                            className="icon-btn"
+                            style={{ width: 22, height: 22 }}
+                            aria-label="删除指标"
+                            onClick={() => {
+                              if (confirm(`删除指标「${kr.title}」？`)) actions.removeKeyResult(g.id, kr.id)
+                            }}
+                          >
+                            ×
+                          </button>
                         </div>
                       ))}
 
@@ -412,10 +429,45 @@ export function ReviewPage() {
           <section className="card">
             <div className="card-head">
               <div>
-                <h3 className="card-title">设置与数据</h3>
-                <div className="card-sub">番茄时长、备份导入、账号与云端、通知，都移到了「设置」页</div>
+                <h3 className="card-title">复盘历史</h3>
+                <div className="card-sub">过去写下的周复盘和日复盘，都留在这里</div>
               </div>
+              {historyCount > 6 ? (
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowHistory((v) => !v)}>
+                  {showHistory ? '收起' : '展开全部'}
+                </button>
+              ) : null}
             </div>
+
+            {historyCount === 0 ? (
+              <div className="empty">还没有历史复盘。写完这周小结，它就会出现在这里。</div>
+            ) : (
+              <div className="stack" style={{ gap: 12, marginTop: 8 }}>
+                {shownWeeks.map((r) => (
+                  <div key={r.weekStart}>
+                    <div className="eyebrow">{formatShort(r.weekStart)} 那周</div>
+                    <div className="card-sub" style={{ whiteSpace: 'pre-wrap', color: 'var(--text-2)', lineHeight: 1.8 }}>
+                      {r.summary || '（没写总结）'}
+                    </div>
+                    {r.adjusted ? (
+                      <div className="card-sub" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
+                        调整：{r.adjusted}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                {shownDays.map((r) => (
+                  <div key={r.date}>
+                    <div className="eyebrow">
+                      {formatShort(r.date)} · {r.score ? `${r.score} 分` : '没打分'}
+                    </div>
+                    <div className="card-sub" style={{ whiteSpace: 'pre-wrap', color: 'var(--text-2)', lineHeight: 1.8 }}>
+                      {r.wentWell || r.blocked || r.tomorrow || '（没写内容）'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>

@@ -97,6 +97,8 @@ export interface StoreActions {
 
   /** 专注时被发现用了娱乐应用：记一笔破戒 */
   logGuardHit: (input: { pkg: string; appName: string; category: GuardCategory; seconds: number }) => void
+  /** 清空破戒记录 */
+  clearGuardLogs: () => void
 
   /** 刚导出过备份，记下时间 */
   markBackedUp: () => void
@@ -667,6 +669,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             seconds: Math.max(0, seconds),
           })
           d.guardLogs = d.guardLogs.slice(0, 400)
+          return d
+        })
+      },
+      clearGuardLogs() {
+        update((d) => {
+          d.guardLogs = []
           return d
         })
       },

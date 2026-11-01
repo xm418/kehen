@@ -13,6 +13,7 @@ export function GuardPanel() {
   const guard = data.settings.guard
   const [granted, setGranted] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
   const refresh = async () => {
     setChecking(true)
@@ -113,19 +114,39 @@ export function GuardPanel() {
         {data.guardLogs.length === 0 ? (
           <div className="card-sub">还没有记录。真被记下来的时候，这里会出现应用名和时间。</div>
         ) : (
-          <div className="stack" style={{ gap: 6 }}>
-            {data.guardLogs.slice(0, 5).map((g) => (
-              <div className="row-between" key={g.id} style={{ fontSize: 12.5 }}>
-                <span>
-                  {g.appName}
-                  <span className="muted"> · {GUARD_LABEL[g.category]}</span>
-                </span>
-                <span className="muted">
-                  {g.date} · {Math.max(1, Math.round(g.seconds / 60))} 分钟
-                </span>
+          <>
+            <div className="row-between">
+              <div className="eyebrow">破戒记录</div>
+              <div className="row" style={{ gap: 6 }}>
+                {data.guardLogs.length > 5 ? (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowAll((v) => !v)}>
+                    {showAll ? '收起' : `查看全部（${data.guardLogs.length}）`}
+                  </button>
+                ) : null}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    if (confirm('清空全部破戒记录？')) actions.clearGuardLogs()
+                  }}
+                >
+                  清空
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+            <div className="stack" style={{ gap: 6, maxHeight: showAll ? 360 : undefined, overflowY: showAll ? 'auto' : undefined }}>
+              {(showAll ? data.guardLogs : data.guardLogs.slice(0, 5)).map((g) => (
+                <div className="row-between" key={g.id} style={{ fontSize: 12.5 }}>
+                  <span>
+                    {g.appName}
+                    <span className="muted"> · {GUARD_LABEL[g.category]}</span>
+                  </span>
+                  <span className="muted">
+                    {g.date} · {Math.max(1, Math.round(g.seconds / 60))} 分钟
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </section>

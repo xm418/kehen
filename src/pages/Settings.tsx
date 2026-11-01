@@ -76,6 +76,18 @@ export function SettingsPage() {
       'text/csv;charset=utf-8',
     )
 
+  const exportBills = () =>
+    exportToFile(
+      csvText(
+        ['日期', '类型', '分类', '金额', '备注'],
+        [...data.expenses]
+          .sort((a, b) => (a.date < b.date ? -1 : 1))
+          .map((e) => [e.date, e.type === 'expense' ? '支出' : '收入', e.category, e.amount, e.note ?? '']),
+      ),
+      `刻痕-记账-${today}.csv`,
+      'text/csv;charset=utf-8',
+    )
+
   return (
     <>
       <div style={{ marginBottom: 16 }}>
@@ -247,6 +259,9 @@ export function SettingsPage() {
           <button className="btn btn-sm" onClick={exportPlans}>
             每日计划 CSV
           </button>
+          <button className="btn btn-sm" onClick={exportBills}>
+            记账 CSV
+          </button>
           <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
             导入 JSON
             <input
@@ -258,7 +273,13 @@ export function SettingsPage() {
                 if (!file) return
                 try {
                   const text = await file.text()
-                  actions.replaceData(JSON.parse(text) as AppData)
+                  const parsed = JSON.parse(text) as Partial<AppData> | null
+                  if (!parsed || typeof parsed !== 'object' || typeof parsed.version !== 'number' || !parsed.settings) {
+                    setImportError('这个文件不是刻痕备份（缺少 version 或 settings）')
+                    return
+                  }
+                  if (!confirm('导入会覆盖当前数据（会先把当前数据存一份快照），继续？')) return
+                  actions.replaceData(parsed as AppData)
                   setImportError('')
                 } catch {
                   setImportError('这个文件不是有效的刻痕备份')
@@ -297,7 +318,7 @@ export function SettingsPage() {
                 })
               }
             />
-            每周日 20:00 提醒
+            超过 7 天没导出就提醒
           </label>
         </div>
         <div className="card-sub" style={{ marginTop: 6 }}>

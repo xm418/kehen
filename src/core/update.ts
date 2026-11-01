@@ -1,9 +1,9 @@
 import { registerPlugin } from '@capacitor/core'
-import { apiBase } from './storage/cloudAdapter'
+import { apiBase, endpointReady, ENDPOINT_HINT } from './storage/cloudAdapter'
 import { isNativeApp } from './nativeNotify'
 
 /** 打包时手动跟着 android versionName 改 */
-export const APP_VERSION = '1.2'
+export const APP_VERSION = '1.3'
 
 export interface UpdateInfo {
   version: string
@@ -34,6 +34,7 @@ export function compareVersion(a: string, b: string): number {
 
 /** 服务器上放 server/app/version.json */
 export async function fetchLatest(endpoint?: string): Promise<UpdateInfo> {
+  if (!endpointReady(endpoint)) throw new Error(ENDPOINT_HINT)
   const res = await fetch(`${apiBase(endpoint)}/app/version`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(`服务器没有版本信息（${res.status}）`)
   const info = (await res.json()) as UpdateInfo

@@ -3,6 +3,7 @@ import { useStore } from '../state/store'
 import { Field } from './Sheet'
 import { buildReminderIcs } from '../core/ics'
 import { exportToFile } from '../core/storage/localAdapter'
+import { isNativeApp } from '../core/nativeNotify'
 
 interface InstallEvent extends Event {
   prompt: () => Promise<void>
@@ -46,8 +47,14 @@ export function AccountPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [endpoint, setEndpoint] = useState(data.settings.sync.endpoint ?? '')
+  // 安装包里没有同源的 /api，相对地址连不上，需要填完整地址
+  const endpointMissing = isNativeApp() && !endpoint.trim()
 
   const run = async (kind: 'login' | 'register') => {
+    if (endpointMissing) {
+      setError('安装包里没有同源的 /api，先在上面填完整地址，例如 http://182.244.118.248:8787/api')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -62,6 +69,10 @@ export function AccountPanel() {
   }
 
   const syncNow = async () => {
+    if (endpointMissing) {
+      setError('安装包里没有同源的 /api，先在上面填完整地址，例如 http://182.244.118.248:8787/api')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -248,6 +259,13 @@ export function AccountPanel() {
             </div>
           </Field>
 
+          {endpointMissing ? (
+            <div className="card-sub" style={{ color: 'var(--ink)', lineHeight: 1.8 }}>
+              安装包里没有同源的 /api，必须填完整地址（电脑和手机要在同一个能连通的网络里），例如
+              http://182.244.118.248:8787/api
+            </div>
+          ) : null}
+
           {!account ? (
             <>
               <div className="grid-2" style={{ gap: 8 }}>
@@ -274,14 +292,14 @@ export function AccountPanel() {
               <div className="row" style={{ gap: 8 }}>
                 <button
                   className="btn btn-primary btn-sm"
-                  disabled={busy || !email.trim() || password.length < 6}
+                  disabled={busy || endpointMissing || !email.trim() || password.length < 6}
                   onClick={() => run('login')}
                 >
                   登录
                 </button>
                 <button
                   className="btn btn-sm"
-                  disabled={busy || !email.trim() || password.length < 6}
+                  disabled={busy || endpointMissing || !email.trim() || password.length < 6}
                   onClick={() => run('register')}
                 >
                   注册新账号
@@ -294,7 +312,7 @@ export function AccountPanel() {
           ) : (
             <>
               <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn btn-sm btn-primary" disabled={busy} onClick={syncNow}>
+                <button className="btn btn-sm btn-primary" disabled={busy || endpointMissing} onClick={syncNow}>
                   立即同步
                 </button>
                 <label className="row" style={{ gap: 6, fontSize: 12.5, color: 'var(--muted)' }}>

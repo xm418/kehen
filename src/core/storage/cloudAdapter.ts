@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import type { AppData } from '../types'
 
 /**
@@ -28,6 +29,13 @@ export function apiBase(endpoint?: string): string {
   if (!raw) return '/api'
   return raw.replace(/\/+$/, '')
 }
+
+/** 安装包里没有同源服务器，相对地址会指向 https://localhost，所以必须填完整地址 */
+export function endpointReady(endpoint?: string): boolean {
+  return !!(endpoint ?? '').trim() || !Capacitor.isNativePlatform()
+}
+
+export const ENDPOINT_HINT = '先在「账号与同步」里填上服务器地址，例如 http://182.244.118.248:8787/api'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)

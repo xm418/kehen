@@ -91,10 +91,10 @@ export default function App() {
     void applyDailyReminder(data.settings.supervision.deadlineHour)
   }, [data.settings.supervision.deadlineHour])
 
-  // 每周日 20:00 提醒导出一次备份；关掉开关就取消
+  // 超过 7 天没导出备份就提醒一次；导出后自动改期
   useEffect(() => {
-    void applyBackupReminder(data.settings.backup.enabled)
-  }, [data.settings.backup.enabled])
+    void applyBackupReminder(data.settings.backup.enabled, data.settings.backup.lastExportedAt)
+  }, [data.settings.backup.enabled, data.settings.backup.lastExportedAt])
 
   // 专注进行中：每 30 秒看一眼前台应用，命中娱乐类就记一笔并弹通知
   const guardActive =

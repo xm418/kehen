@@ -1,4 +1,4 @@
-import { apiBase } from './storage/cloudAdapter'
+import { apiBase, endpointReady, ENDPOINT_HINT } from './storage/cloudAdapter'
 import { APP_VERSION } from './update'
 import { isNativeApp } from './nativeNotify'
 
@@ -12,6 +12,7 @@ export async function submitFeedback(endpoint: string | undefined, input: Feedba
   const text = input.text.trim()
   if (!text) throw new Error('先写点什么再提交')
   if (text.length > 1000) throw new Error('一条建议最多 1000 字')
+  if (!endpointReady(endpoint)) throw new Error(ENDPOINT_HINT)
 
   const res = await fetch(`${apiBase(endpoint)}/feedback`, {
     method: 'POST',
