@@ -404,7 +404,18 @@ export function SettingsPage() {
                     return
                   }
                   if (!confirm('导入会覆盖当前数据（会先把当前数据存一份快照），继续？')) return
-                  actions.replaceData(parsed as AppData)
+                  // 保留当前账号和同步设置：导入的模板文件里没有账号信息，
+                  // 不能把用户踢下线；云端模式下导入的数据也会自动同步上去。
+                  const curSettings = data.settings
+                  const merged: AppData = {
+                    ...(parsed as AppData),
+                    settings: {
+                      ...(parsed as AppData).settings,
+                      account: curSettings.account,
+                      sync: curSettings.sync,
+                    },
+                  }
+                  actions.replaceData(merged)
                   setImportError('')
                 } catch {
                   setImportError('这个文件不是有效的刻痕备份')

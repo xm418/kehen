@@ -259,8 +259,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const snap = await syncPull(endpoint, token)
       revisionCache.set(key, snap.revision)
       if (snap.data) {
+        const cloud = normalizeData(snap.data)
+        // 云端已有数据时，把本机的计划和单词合并进去，避免刚导入的内容被云端覆盖。
+        // 计划：按日期合并，重复条目跳过；单词：按 word 去重。
+        const localPlans = fallback.plans ?? []
+        if (localPlans.length > 0) {
+          const byDate = new Map(cloud.plans.map((p) => [p.date, p]))
+          for (const p of localPlans) {
+            const exist = byDate.get(p.date)
+            if (!exist) {
+              cloud.plans.push(p)
+            } else {
+              const texts = new Set(exist.items.map((i) => i.text.trim()))
+              for (const it of p.items) {
+                if (!texts.has(it.text.trim())) {
+                  exist.items.push(it)
+                  texts.add(it.text.trim())
+                }
+              }
+            }
+          }
+          cloud.plans.sort((a, b) => (a.date < b.date ? -1 : 1))
+        }
+        const have = new Set((cloud.words || []).map((w) => String(w.word).toLowerCase()))
+        for (const w of fallback.words || []) {
+          const k = String(w?.word || '').toLowerCase()
+          if (!k || have.has(k)) continue
+          have.add(k)
+          cloud.words.push(w)
+        }
         setSync({ state: 'ok', message: '已从云端载入', at: snap.updatedAt ?? undefined })
-        return normalizeData(snap.data)
+        return cloud
       }
       const pushed = await syncPush(endpoint, token, fallback, snap.revision)
       revisionCache.set(key, pushed.revision)
@@ -308,6 +337,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             const pulled = normalizeData(snap.data)
             // 登录凭证只认本机：云端数据里没有 account 时也不能把自己踢下线
             pulled.settings.account = account
+            // 云端较新时也别把本机刚导入的计划/单词丢掉，合并进去
+            const byDate = new Map(pulled.plans.map((p) => [p.date, p]))
+            for (const p of next.plans) {
+              const exist = byDate.get(p.date)
+              if (!exist) {
+                pulled.plans.push(p)
+              } else {
+                const texts = new Set(exist.items.map((i) => i.text.trim()))
+                for (const it of p.items) {
+                  if (!texts.has(it.text.trim())) {
+                    exist.items.push(it)
+                    texts.add(it.text.trim())
+                  }
+                }
+              }
+            }
+            pulled.plans.sort((a, b) => (a.date < b.date ? -1 : 1))
+            const have = new Set((pulled.words || []).map((w) => String(w.word).toLowerCase()))
+            for (const w of next.words || []) {
+              const k = String(w?.word || '').toLowerCase()
+              if (!k || have.has(k)) continue
+              have.add(k)
+              pulled.words.push(w)
+            }
             setData(pulled)
             setSync({ state: 'ok', message: '已从云端载入', at: snap.updatedAt ?? undefined })
             setReady(true)

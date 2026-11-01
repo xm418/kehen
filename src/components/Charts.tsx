@@ -183,7 +183,7 @@ export function ScoreDots({ scores }: { scores: (number | null)[] }) {
             height: 26,
             borderRadius: 6,
             background: s ? `color-mix(in srgb, var(--ink) ${s * 18}%, var(--surface-3))` : 'var(--surface-3)',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--border-strong)',
             display: 'grid',
             placeItems: 'center',
             fontFamily: 'var(--mono)',
