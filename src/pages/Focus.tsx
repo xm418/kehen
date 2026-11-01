@@ -4,7 +4,7 @@ import { useTimerSeconds, useTodayKey } from '../hooks/useClock'
 import { focusByDay, focusMinutesOn, isCleanSession, sessionDate } from '../core/stats'
 import { addDays, formatShort, timeToText, weekdayLabel, minutesToText } from '../core/date'
 import { SparkBars, BarList } from '../components/Charts'
-import type { TimerMode } from '../core/types'
+import type { FocusSession, TimerMode } from '../core/types'
 
 export function FocusPage() {
   const { data, actions } = useStore()
@@ -55,6 +55,13 @@ export function FocusPage() {
   }
 
   const progress = timer.plannedSeconds === 0 ? 0 : 1 - seconds / timer.plannedSeconds
+
+  /** 记错了或者不想留的专注记录可以删掉 */
+  const dropSession = (s: FocusSession) => {
+    if (confirm(`删除这段 ${s.minutes} 分钟的专注记录？删掉后统计会跟着变。`)) {
+      actions.removeSession(s.id)
+    }
+  }
 
   return (
     <>
@@ -266,9 +273,19 @@ export function FocusPage() {
                 {new Date(s.startedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} ·{' '}
                 {s.subject || '未命名'}
               </span>
-              <span className="num muted">
-                {s.minutes} 分钟
-                {(s.interruptions ?? 0) > 0 ? ` · 中断 ${s.interruptions} 次` : ''}
+              <span className="row" style={{ gap: 8, alignItems: 'center' }}>
+                <span className="num muted">
+                  {s.minutes} 分钟
+                  {(s.interruptions ?? 0) > 0 ? ` · 中断 ${s.interruptions} 次` : ''}
+                </span>
+                <button
+                  className="icon-btn"
+                  style={{ width: 22, height: 22 }}
+                  aria-label="删除这段专注记录"
+                  onClick={() => dropSession(s)}
+                >
+                  ×
+                </button>
               </span>
             </div>
           ))
@@ -287,9 +304,19 @@ export function FocusPage() {
               <span>
                 {formatShort(sessionDate(s.startedAt))} · {s.subject || '未命名'}
               </span>
-              <span className="num muted">
-                {s.minutes} 分钟
-                {(s.interruptions ?? 0) > 0 ? ` · 中断 ${s.interruptions} 次` : ''}
+              <span className="row" style={{ gap: 8, alignItems: 'center' }}>
+                <span className="num muted">
+                  {s.minutes} 分钟
+                  {(s.interruptions ?? 0) > 0 ? ` · 中断 ${s.interruptions} 次` : ''}
+                </span>
+                <button
+                  className="icon-btn"
+                  style={{ width: 22, height: 22 }}
+                  aria-label="删除这段专注记录"
+                  onClick={() => dropSession(s)}
+                >
+                  ×
+                </button>
               </span>
             </div>
           ))}

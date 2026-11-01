@@ -5,7 +5,7 @@ import { dueReviews } from '../core/stats'
 import { formatShort, diffDays, weekdayLabel, minutesToText } from '../core/date'
 import { ACCEPT_FILE_TYPES, MAX_FILE_SIZE, formatSize, guessMime } from '../core/files'
 import { StudyForm } from '../components/StudyForm'
-import { Sheet } from '../components/Sheet'
+import { Sheet, Field } from '../components/Sheet'
 import type { StudyLog } from '../core/types'
 
 /** 把命中的关键词标出来，长笔记里才找得到那句话 */
@@ -41,6 +41,11 @@ export function NotesPage() {
   const [tag, setTag] = useState<string>('')
   const [detail, setDetail] = useState<StudyLog | null>(null)
   const [editing, setEditing] = useState<StudyLog | null>(null)
+  const [sort, setSort] = useState<'new' | 'old'>('new')
+  const [manage, setManage] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [subjectOpen, setSubjectOpen] = useState(false)
+  const [subjectDraft, setSubjectDraft] = useState('')
 
   const due = dueReviews(data.studyLogs, today)
   const subjects = ['全部', ...Array.from(new Set(data.studyLogs.map((l) => l.subject)))]
@@ -67,8 +72,53 @@ export function NotesPage() {
       arr.push(l)
       map.set(l.date, arr)
     }
-    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
-  }, [filtered])
+    const entries = [...map.entries()].sort((a, b) => {
+      if (sort === 'old') return a[0] < b[0] ? -1 : 1
+      return a[0] < b[0] ? 1 : -1
+    })
+    // 旧的在前时，同一天里也把最早记的排在最上面
+    if (sort === 'old') {
+      return entries.map(([date, arr]) => [date, [...arr].reverse()] as [string, StudyLog[]])
+    }
+    return entries
+  }, [filtered, sort])
+
+  const toggleManage = () => {
+    setManage((v) => !v)
+    setSelected(new Set())
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allShownSelected = filtered.length > 0 && filtered.every((l) => selected.has(l.id))
+
+  const selectAllShown = () => {
+    setSelected(allShownSelected ? new Set() : new Set(filtered.map((l) => l.id)))
+  }
+
+  const batchDelete = () => {
+    if (selected.size === 0) return
+    if (!confirm(`删除选中的 ${selected.size} 条记录？附件不会跟着删。`)) return
+    actions.deleteStudyLogs([...selected])
+    setManage(false)
+    setSelected(new Set())
+  }
+
+  const applySubject = () => {
+    const name = subjectDraft.trim()
+    if (!name || selected.size === 0) return
+    actions.updateStudyLogs([...selected], { subject: name })
+    setSubjectOpen(false)
+    setManage(false)
+    setSelected(new Set())
+  }
 
   const detailLive = detail ? data.studyLogs.find((l) => l.id === detail.id) ?? null : null
 
@@ -148,7 +198,52 @@ export function NotesPage() {
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
+        <button
+          className="btn btn-sm"
+          style={{ flexShrink: 0 }}
+          onClick={() => setSort((s) => (s === 'new' ? 'old' : 'new'))}
+        >
+          {sort === 'new' ? '最新在前' : '最早在前'}
+        </button>
+        <button
+          className={`btn btn-sm${manage ? ' btn-primary' : ''}`}
+          style={{ flexShrink: 0 }}
+          onClick={toggleManage}
+        >
+          {manage ? '完成' : '管理'}
+        </button>
       </div>
+
+      {manage ? (
+        <section className="card" style={{ marginBottom: 12 }}>
+          <div className="row-between" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <div className="card-sub" style={{ margin: 0 }}>
+              已选 {selected.size} / {filtered.length} 条
+            </div>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm" onClick={selectAllShown}>
+                {allShownSelected ? '取消全选' : '全选'}
+              </button>
+              <button
+                className="btn btn-sm"
+                disabled={selected.size === 0}
+                onClick={() => {
+                  setSubjectDraft('')
+                  setSubjectOpen(true)
+                }}
+              >
+                改科目
+              </button>
+              <button className="btn btn-sm btn-danger" disabled={selected.size === 0} onClick={batchDelete}>
+                删除
+              </button>
+            </div>
+          </div>
+          <div className="card-sub" style={{ marginTop: 8 }}>
+            批量操作只影响当前筛选出来的记录。
+          </div>
+        </section>
+      ) : null}
 
       <div className="pill-scroll" style={{ marginBottom: 6 }}>
         {subjects.map((s) => (
@@ -197,7 +292,24 @@ export function NotesPage() {
             </div>
             <div className="day-group">
               {items.map((l) => (
-                <article className="log-card" key={l.id} onClick={() => setDetail(l)} style={{ cursor: 'pointer' }}>
+                <article
+                  className="log-card"
+                  key={l.id}
+                  onClick={() => (manage ? toggleSelect(l.id) : setDetail(l))}
+                  style={{
+                    cursor: 'pointer',
+                    outline: manage && selected.has(l.id) ? '1.5px solid var(--ink)' : undefined,
+                    opacity: manage && !selected.has(l.id) ? 0.72 : 1,
+                  }}
+                >
+                  {manage ? (
+                    <span
+                      className={`word-check${selected.has(l.id) ? ' on' : ''}`}
+                      style={{ marginBottom: 8 }}
+                    >
+                      {selected.has(l.id) ? '✓' : ''}
+                    </span>
+                  ) : null}
                   <div className="row-between">
                     <span className="log-title">
                       <Highlight text={l.title} kw={keyword.trim()} />
@@ -228,6 +340,47 @@ export function NotesPage() {
           </div>
         ))
       )}
+
+      <Sheet
+        open={subjectOpen}
+        onClose={() => setSubjectOpen(false)}
+        title="批量改科目"
+        subtitle={`将修改 ${selected.size} 条记录`}
+      >
+        <div className="stack">
+          <Field label="科目">
+            <input
+              className="input"
+              value={subjectDraft}
+              onChange={(e) => setSubjectDraft(e.target.value)}
+              placeholder="例如 数学"
+              autoFocus
+            />
+          </Field>
+          {subjects.length > 1 ? (
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {subjects
+                .filter((s) => s !== '全部')
+                .map((s) => (
+                  <button
+                    key={s}
+                    className={`pill${subjectDraft === s ? ' active' : ''}`}
+                    onClick={() => setSubjectDraft(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+            </div>
+          ) : null}
+          <button
+            className="btn btn-primary btn-block"
+            disabled={!subjectDraft.trim()}
+            onClick={applySubject}
+          >
+            保存
+          </button>
+        </div>
+      </Sheet>
 
       <StudyForm open={formOpen} onClose={() => setFormOpen(false)} />
       <StudyForm open={!!editing} log={editing ?? undefined} onClose={() => setEditing(null)} />

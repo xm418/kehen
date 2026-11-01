@@ -97,6 +97,8 @@ export interface StoreActions {
   setTimerSubject: (subject: string) => void
   /** 关掉「记下学了什么」的弹窗 */
   dismissFocusPrompt: () => void
+  /** 删掉一段专注记录 */
+  removeSession: (id: string) => void
 
   /** 这一段专注对准哪条今日计划；传空表示取消关联 */
   setTimerPlan: (planItemId?: string, subject?: string) => void
@@ -107,7 +109,11 @@ export interface StoreActions {
 
   addStudyLog: (input: NewStudyInput) => void
   updateStudyLog: (id: string, patch: Partial<StudyLog>) => void
+  /** 批量改记录，比如统一换科目 */
+  updateStudyLogs: (ids: string[], patch: Partial<StudyLog>) => void
   deleteStudyLog: (id: string) => void
+  /** 批量删除记录 */
+  deleteStudyLogs: (ids: string[]) => void
   reviewStudyLog: (id: string) => void
 
   /** 存一份文档（本机 IndexedDB + 云模式下后台传服务器），返回元信息 */
@@ -592,6 +598,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       dismissFocusPrompt() {
         setFocusPrompt(null)
       },
+      removeSession(id) {
+        update((d) => {
+          d.sessions = d.sessions.filter((s) => s.id !== id)
+          return d
+        })
+      },
 
       addPlanItem(date, text, temp, goalId) {
         const body = text.trim()
@@ -653,9 +665,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return d
         })
       },
+      updateStudyLogs(ids, patch) {
+        if (ids.length === 0) return
+        const target = new Set(ids)
+        update((d) => {
+          for (const l of d.studyLogs) {
+            if (target.has(l.id)) Object.assign(l, patch)
+          }
+          return d
+        })
+      },
       deleteStudyLog(id) {
         update((d) => {
           d.studyLogs = d.studyLogs.filter((l) => l.id !== id)
+          return d
+        })
+      },
+      deleteStudyLogs(ids) {
+        if (ids.length === 0) return
+        const target = new Set(ids)
+        update((d) => {
+          d.studyLogs = d.studyLogs.filter((l) => !target.has(l.id))
           return d
         })
       },

@@ -73,6 +73,29 @@ export function ReviewPage() {
   const activeGoals = data.goals.filter((g) => g.status === 'active')
   const finishedGoals = data.goals.filter((g) => g.status !== 'active')
   const [showFinished, setShowFinished] = useState(false)
+
+  // 编辑目标：改标题、周期或把截止日期往后挪
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
+  const [egTitle, setEgTitle] = useState('')
+  const [egDue, setEgDue] = useState('')
+  const [egHorizon, setEgHorizon] = useState<Goal['horizon']>('month')
+
+  const openEditGoal = (g: Goal) => {
+    setEditingGoal(g)
+    setEgTitle(g.title)
+    setEgDue(g.dueDate)
+    setEgHorizon(g.horizon)
+  }
+
+  const saveGoalEdit = () => {
+    if (!editingGoal || !egTitle.trim()) return
+    actions.updateGoal(editingGoal.id, {
+      title: egTitle.trim(),
+      dueDate: egDue || editingGoal.dueDate,
+      horizon: egHorizon,
+    })
+    setEditingGoal(null)
+  }
   // 目标卡片的「本周推进」固定按本周算，不随上面浏览的历史周变化
   const thisWeekStart = startOfWeek(today)
 
@@ -407,6 +430,9 @@ export function ReviewPage() {
                         >
                           {planGoal === g.id ? '已加进明天' : '写进明天计划'}
                         </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => openEditGoal(g)}>
+                          编辑
+                        </button>
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => actions.updateGoal(g.id, { status: 'done' })}
@@ -587,6 +613,51 @@ export function ReviewPage() {
           </div>
           <button className="btn btn-primary btn-block" onClick={submitKr}>
             添加
+          </button>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={!!editingGoal}
+        onClose={() => setEditingGoal(null)}
+        title="编辑目标"
+        subtitle="改标题，或者把截止日期往后挪一下"
+      >
+        <div className="stack">
+          <Field label="目标">
+            <input
+              className="input"
+              value={egTitle}
+              onChange={(e) => setEgTitle(e.target.value)}
+              autoFocus
+            />
+          </Field>
+          <Field label="周期">
+            <div className="row" style={{ gap: 6 }}>
+              {([
+                { v: 'week', label: '周' },
+                { v: 'month', label: '月' },
+                { v: 'quarter', label: '季度' },
+              ] as const).map((h) => (
+                <button
+                  key={h.v}
+                  className={`pill${egHorizon === h.v ? ' active' : ''}`}
+                  onClick={() => setEgHorizon(h.v)}
+                >
+                  {h.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="截止日期">
+            <input className="input" type="date" value={egDue} onChange={(e) => setEgDue(e.target.value)} />
+          </Field>
+          <button
+            className="btn btn-primary btn-block"
+            onClick={saveGoalEdit}
+            disabled={!egTitle.trim()}
+          >
+            保存
           </button>
         </div>
       </Sheet>

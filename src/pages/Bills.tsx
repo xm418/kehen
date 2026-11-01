@@ -37,6 +37,8 @@ export function BillsPage() {
   const [date, setDate] = useState(today)
   const [detail, setDetail] = useState<Expense | null>(null)
   const [keyword, setKeyword] = useState('')
+  const [budgetOpen, setBudgetOpen] = useState(false)
+  const [budgetDraft, setBudgetDraft] = useState('')
 
   // 每月初跨月时自动跟进，不然会一直停在旧月份；正在翻历史月份则不动
   const prevCurrent = useRef(currentMonth)
@@ -62,6 +64,15 @@ export function BillsPage() {
 
   const totalExpense = monthly.filter((e) => e.type === 'expense').reduce((a, e) => a + e.amount, 0)
   const totalIncome = monthly.filter((e) => e.type === 'income').reduce((a, e) => a + e.amount, 0)
+
+  // 预算按「每月支出」算，和上个月比一比才知道是多花还是少花
+  const budget = data.settings.bills.monthlyBudget
+  const budgetPct = budget > 0 ? Math.round((totalExpense / budget) * 100) : 0
+  const monthWord = month === currentMonth ? '本月' : '该月'
+  const prevMonth = shiftMonth(month, -1)
+  const prevExpense = data.expenses
+    .filter((e) => e.type === 'expense' && e.date.startsWith(prevMonth))
+    .reduce((a, e) => a + e.amount, 0)
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>()
@@ -157,6 +168,76 @@ export function BillsPage() {
           <div className="metric-label">本月结余</div>
         </div>
       </div>
+
+      <section className="card" style={{ marginBottom: 12 }}>
+        <div className="card-head">
+          <div>
+            <h3 className="card-title">{monthWord}预算</h3>
+            <div className="card-sub">
+              {budget > 0
+                ? `上限 ¥${money(budget)} · 已用 ${budgetPct}%`
+                : '设一个上限，月底不至于吓一跳'}
+            </div>
+          </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setBudgetDraft(budget > 0 ? String(budget) : '')
+              setBudgetOpen(true)
+            }}
+          >
+            {budget > 0 ? '调整' : '设定'}
+          </button>
+        </div>
+
+        {budget > 0 ? (
+          <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+            <div className="prog">
+              <div
+                className="prog-fill"
+                style={{
+                  width: `${Math.min(100, (totalExpense / budget) * 100)}%`,
+                  background: totalExpense > budget ? 'var(--danger)' : undefined,
+                }}
+              />
+            </div>
+            <div className="row-between" style={{ fontSize: 12.5 }}>
+              <span className="muted">
+                {totalExpense > budget
+                  ? `超支 ¥${money(totalExpense - budget)}`
+                  : `还剩 ¥${money(budget - totalExpense)}`}
+              </span>
+              <span className="num muted">
+                ¥{money(totalExpense)} / ¥{money(budget)}
+              </span>
+            </div>
+            {totalExpense > budget ? (
+              <div className="card-sub" style={{ color: 'var(--danger)' }}>
+                已经超了，剩下的日子先按「能不买就不买」过。
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <hr className="divider" />
+
+        <div className="row-between" style={{ fontSize: 12.5 }}>
+          <span className="eyebrow">环比上月</span>
+          <span className="num muted">
+            {prevExpense > 0
+              ? `${totalExpense >= prevExpense ? '↑' : '↓'} ${Math.round(
+                  (Math.abs(totalExpense - prevExpense) / prevExpense) * 100,
+                )}%`
+              : '上月无支出'}
+          </span>
+        </div>
+        <div className="card-sub" style={{ marginTop: 6 }}>
+          上月支出 ¥{money(prevExpense)} · {monthWord} ¥{money(totalExpense)}
+          {prevExpense > 0
+            ? `，${totalExpense >= prevExpense ? '多花' : '少花'} ¥${money(Math.abs(totalExpense - prevExpense))}`
+            : ''}
+        </div>
+      </section>
 
       <section className="card" style={{ marginBottom: 12 }}>
         <div className="card-head">
@@ -307,6 +388,61 @@ export function BillsPage() {
           )
         })
       )}
+
+      <Sheet
+        open={budgetOpen}
+        onClose={() => setBudgetOpen(false)}
+        title="每月预算"
+        subtitle="只算支出，收入不计入；所有月份共用这一个上限"
+      >
+        <div className="stack">
+          <Field label="每月支出上限">
+            <input
+              className="input num"
+              value={budgetDraft}
+              inputMode="decimal"
+              placeholder="例如 2000"
+              onChange={(e) =>
+                setBudgetDraft(e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))
+              }
+            />
+          </Field>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {[800, 1000, 1500, 2000, 3000].map((v) => (
+              <button
+                key={v}
+                className={`pill${Number(budgetDraft) === v ? ' active' : ''}`}
+                onClick={() => setBudgetDraft(String(v))}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn btn-primary btn-block"
+            disabled={!Number(budgetDraft)}
+            onClick={() => {
+              actions.updateSettings({
+                bills: { ...data.settings.bills, monthlyBudget: Math.max(0, Number(budgetDraft)) },
+              })
+              setBudgetOpen(false)
+            }}
+          >
+            保存
+          </button>
+          {budget > 0 ? (
+            <button
+              className="btn btn-ghost btn-block"
+              onClick={() => {
+                actions.updateSettings({ bills: { ...data.settings.bills, monthlyBudget: 0 } })
+                setBudgetOpen(false)
+              }}
+            >
+              取消预算上限
+            </button>
+          ) : null}
+        </div>
+      </Sheet>
 
       <ExpenseDetail expense={detail} onClose={() => setDetail(null)} />
     </>

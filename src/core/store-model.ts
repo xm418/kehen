@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backup: { ...DEFAULT_BACKUP },
   defaultFocusSubject: '专业学习',
   words: { dailyGoal: 30 },
+  bills: { monthlyBudget: 0 },
 }
 
 /** 首次使用时的初始数据：只放最少的两条，其余交给用户自己定义 */
@@ -141,6 +142,7 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
       guard: { ...base.settings.guard, ...(raw.settings?.guard ?? {}) },
       backup: { ...base.settings.backup, ...(raw.settings?.backup ?? {}) },
       words: { ...base.settings.words, ...(raw.settings?.words ?? {}) },
+      bills: { ...base.settings.bills, ...(raw.settings?.bills ?? {}) },
     },
     timer: { ...base.timer, ...(raw.timer ?? {}) },
   }

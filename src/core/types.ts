@@ -180,6 +180,12 @@ export interface WordSettings {
   dailyGoal: number
 }
 
+/** 记账偏好 */
+export interface BillSettings {
+  /** 每月支出上限，0 表示不设预算 */
+  monthlyBudget: number
+}
+
 export interface Settings {
   nickname: string
   theme: 'light' | 'dark'
@@ -192,6 +198,7 @@ export interface Settings {
   backup: BackupConfig
   defaultFocusSubject: string
   words: WordSettings
+  bills: BillSettings
 }
 
 /** 今天已经学过的单词数，跨天自动归零 */
