@@ -6,7 +6,6 @@ import { TodayPage } from './pages/Today'
 import { HabitsPage } from './pages/Habits'
 import { FocusPage } from './pages/Focus'
 import { NotesPage } from './pages/Notes'
-import { DocsPage } from './pages/Docs'
 import { BillsPage } from './pages/Bills'
 import { ReviewPage } from './pages/Review'
 import { SettingsPage } from './pages/Settings'
@@ -17,14 +16,13 @@ import { useWakeLock } from './hooks/useWakeLock'
 import { applyBackupReminder, applyDailyReminder, notifyGuardHit } from './core/nativeNotify'
 import { GUARD_LABEL, guardApp, readForeground } from './core/guard'
 
-type TabKey = 'today' | 'habits' | 'focus' | 'notes' | 'docs' | 'bills' | 'review' | 'settings'
+type TabKey = 'today' | 'habits' | 'focus' | 'notes' | 'bills' | 'review' | 'settings'
 
 const NAV: { key: TabKey; label: string; icon: IconName }[] = [
   { key: 'today', label: '今日', icon: 'today' },
   { key: 'habits', label: '习惯', icon: 'habit' },
   { key: 'focus', label: '专注', icon: 'focus' },
   { key: 'notes', label: '记录', icon: 'note' },
-  { key: 'docs', label: '文档', icon: 'doc' },
   { key: 'bills', label: '记账', icon: 'bill' },
   { key: 'review', label: '复盘', icon: 'chart' },
   { key: 'settings', label: '设置', icon: 'settings' },
@@ -183,7 +181,6 @@ export default function App() {
           {tab === 'habits' && <HabitsPage />}
           {tab === 'focus' && <FocusPage />}
           {tab === 'notes' && <NotesPage />}
-          {tab === 'docs' && <DocsPage />}
           {tab === 'bills' && <BillsPage />}
           {tab === 'review' && <ReviewPage />}
           {tab === 'settings' && <SettingsPage />}

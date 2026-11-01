@@ -6,7 +6,6 @@ export type IconName =
   | 'habit'
   | 'focus'
   | 'note'
-  | 'doc'
   | 'bill'
   | 'chart'
   | 'plus'
@@ -49,12 +48,6 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M4.6 20V13M10.6 20V8.4M16.6 20V4.6" />
       <path d="M3 20h18" />
-    </>
-  ),
-  doc: (
-    <>
-      <path d="M6.2 3.8h7.6l4 4v12.4H6.2z" />
-      <path d="M13.4 3.8v4.4h4.4M9.2 12.6h5.6M9.2 16h4.2" />
     </>
   ),
   bill: (

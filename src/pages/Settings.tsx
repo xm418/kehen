@@ -4,7 +4,6 @@ import { useTodayKey } from '../hooks/useClock'
 import { formatShort } from '../core/date'
 import { Field } from '../components/Sheet'
 import { AccountPanel } from '../components/AccountPanel'
-import { PushPanel } from '../components/PushPanel'
 import { GuardPanel } from '../components/GuardPanel'
 import { AppCarePanel } from '../components/AppCarePanel'
 import { exportToFile } from '../core/storage/localAdapter'
@@ -229,8 +228,6 @@ export function SettingsPage() {
       <GuardPanel />
 
       <AppCarePanel />
-
-      <PushPanel />
 
       <div style={{ marginBottom: 12 }}>
         <AccountPanel />
