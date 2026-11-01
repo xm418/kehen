@@ -18,6 +18,9 @@ export type IconName =
   | 'chevron'
   | 'download'
   | 'settings'
+  | 'word'
+  | 'sound'
+  | 'theme'
 
 const PATHS: Record<IconName, ReactElement> = {
   today: (
@@ -83,6 +86,24 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <circle cx="12" cy="12" r="3.2" />
       <path d="M12 3.6v2.2M12 18.2v2.2M3.6 12h2.2M18.2 12h2.2M6.1 6.1l1.5 1.5M16.4 16.4l1.5 1.5M17.9 6.1l-1.5 1.5M7.6 16.4l-1.5 1.5" />
+    </>
+  ),
+  word: (
+    <>
+      <path d="M4.5 19V6.2A2.2 2.2 0 016.7 4h12.8v14.4H6.7a2.2 2.2 0 00-2.2 2.2z" />
+      <path d="M4.5 19A2.2 2.2 0 006.7 21.2h12.8M9 9.4h6M9 13h4" />
+    </>
+  ),
+  sound: (
+    <>
+      <path d="M4.5 9.5v5h3.2l5 4V5.5l-5 4z" />
+      <path d="M15.5 9a4.4 4.4 0 010 6M18 6.6a8 8 0 010 10.8" />
+    </>
+  ),
+  theme: (
+    <>
+      <circle cx="12" cy="12" r="4.4" />
+      <path d="M12 3.4v1.8M12 18.8v1.8M3.4 12h1.8M18.8 12h1.8M5.9 5.9l1.3 1.3M16.8 16.8l1.3 1.3M18.1 5.9l-1.3 1.3M7.2 16.8l-1.3 1.3" />
     </>
   ),
 }

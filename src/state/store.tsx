@@ -125,6 +125,12 @@ export interface StoreActions {
   /** 清空破戒记录 */
   clearGuardLogs: () => void
 
+  /** 批量加单词（按 word 去重），返回实际加了多少个 */
+  addWords: (items: { word: string; phonetic?: string; meaning?: string }[]) => number
+  removeWord: (id: string) => void
+  /** 标记认识/不认识；不认识会顺手累一次复习计数 */
+  setWordFamiliar: (id: string, familiar: 0 | 1) => void
+
   /** 刚导出过备份，记下时间 */
   markBackedUp: () => void
 
@@ -794,6 +800,46 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       clearGuardLogs() {
         update((d) => {
           d.guardLogs = []
+          return d
+        })
+      },
+
+      addWords(items) {
+        const now = new Date().toISOString()
+        let added = 0
+        update((d) => {
+          const existing = new Set(d.words.map((w) => w.word))
+          for (const item of items) {
+            const word = item.word.trim().toLowerCase()
+            if (!word || existing.has(word)) continue
+            existing.add(word)
+            d.words.push({
+              id: uid('w'),
+              word,
+              phonetic: item.phonetic || undefined,
+              meaning: item.meaning || undefined,
+              familiar: 0,
+              addedAt: now,
+              reviewCount: 0,
+            })
+            added += 1
+          }
+          return d
+        })
+        return added
+      },
+      removeWord(id) {
+        update((d) => {
+          d.words = d.words.filter((w) => w.id !== id)
+          return d
+        })
+      },
+      setWordFamiliar(id, familiar) {
+        update((d) => {
+          const w = d.words.find((x) => x.id === id)
+          if (!w) return d
+          w.familiar = familiar
+          if (familiar === 0) w.reviewCount += 1
           return d
         })
       },

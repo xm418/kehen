@@ -154,6 +154,30 @@ export async function fileDelete(endpoint: string | undefined, token: string, id
   })
 }
 
+/** 词典查询：给导入的单词补音标/释义，查不到返回 null */
+export interface DictResult {
+  phonetic: string
+  audio: string
+  meaning: string
+}
+
+export async function dictLookup(
+  endpoint: string | undefined,
+  token: string,
+  word: string,
+): Promise<DictResult | null> {
+  try {
+    const res = await request<{ ok: boolean; phonetic?: string; audio?: string; meaning?: string }>(
+      `${apiBase(endpoint)}/dict?word=${encodeURIComponent(word)}`,
+      { headers: authHeaders(token) },
+    )
+    if (!res.ok) return null
+    return { phonetic: res.phonetic ?? '', audio: res.audio ?? '', meaning: res.meaning ?? '' }
+  } catch {
+    return null
+  }
+}
+
 /** 下载返回二进制，不能走 request()（它会按 JSON 解析） */
 export async function fileDownload(
   endpoint: string | undefined,

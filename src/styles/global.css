@@ -1222,6 +1222,39 @@ a {
   }
 }
 
+/* ---------- 单词 ---------- */
+.word-card {
+  cursor: pointer;
+  user-select: none;
+}
+
+.word-stage {
+  text-align: center;
+  padding: 14px 4px 4px;
+  min-height: 128px;
+}
+
+.word-text {
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.word-phonetic {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.word-meaning {
+  margin-top: 12px;
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+
 /* 搜索命中标记 */
 mark.hl {
   background: color-mix(in srgb, var(--ink) 16%, transparent);

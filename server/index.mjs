@@ -638,6 +638,54 @@ async function handleFileDelete(res, user, id) {
   return send(res, 200, { ok: true })
 }
 
+/* ------------------------------ 词典代理 ------------------------------ */
+
+/**
+ * GET /api/dict?word=xxx —— 代理 dictionaryapi.dev，给导入的单词补音标/释义。
+ * 需要登录；6 秒超时；查不到就回 { ok:false }，前端留空不挡导入。
+ */
+async function handleDict(req, res, user) {
+  void user
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const word = String(url.searchParams.get('word') || '').trim().toLowerCase()
+  if (!/^[a-z][a-z'-]*$/.test(word)) return send(res, 400, { error: '单词格式不正确' })
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 6000)
+  try {
+    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'kedu-app/1.6' },
+    })
+    if (!r.ok) return send(res, 200, { ok: false })
+    const json = await r.json()
+    const entry = Array.isArray(json) ? json[0] : null
+    if (!entry) return send(res, 200, { ok: false })
+    const phonetic =
+      entry.phonetic ||
+      (Array.isArray(entry.phonetics)
+        ? (entry.phonetics.find((p) => p && p.text)?.text ?? '')
+        : '')
+    const audio = Array.isArray(entry.phonetics)
+      ? (entry.phonetics.find((p) => p && p.audio)?.audio ?? '')
+      : ''
+    let meaning = ''
+    if (Array.isArray(entry.meanings)) {
+      for (const m of entry.meanings) {
+        const def = m?.definitions?.[0]?.definition
+        if (def) {
+          meaning = `${m.partOfSpeech ? m.partOfSpeech + '. ' : ''}${def}`
+          break
+        }
+      }
+    }
+    return send(res, 200, { ok: true, phonetic: phonetic || '', audio: audio || '', meaning: meaning || '' })
+  } catch {
+    return send(res, 200, { ok: false })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** 版本信息：server/app/version.json，改这个文件就能推更新 */
 async function handleVersion(res) {
   const file = path.join(APP_DIR, 'version.json')
@@ -718,6 +766,12 @@ const server = createServer(async (req, res) => {
       return handleFileDelete(res, user, id).catch((err) => send(res, 400, { error: err.message }))
     }
     return send(res, 405, { error: '不支持的请求方法' })
+  }
+
+  if (url.pathname === '/api/dict' && req.method === 'GET') {
+    const user = currentUser(req)
+    if (!user) return send(res, 401, { error: '登录已失效，请重新登录' })
+    return handleDict(req, res, user).catch(() => send(res, 200, { ok: false }))
   }
 
   if (url.pathname === '/api/sync') {

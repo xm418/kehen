@@ -283,8 +283,22 @@ export interface DocumentMeta {
   remoteId?: string
 }
 
+/** 一个英语单词：音标/释义允许留空，导入时会尽量补全 */
+export interface WordItem {
+  id: string
+  word: string
+  phonetic?: string
+  meaning?: string
+  /** 1 表示已经认识，不再进学习队列 */
+  familiar: 0 | 1
+  addedAt: Stamp
+  /** 「不认识」的次数，越多排越前 */
+  reviewCount: number
+}
+
 export interface AppData {
   version: number
+  words: WordItem[]
   habits: Habit[]
   habitLogs: HabitLog[]
   sessions: FocusSession[]

@@ -6,6 +6,7 @@ import { TodayPage } from './pages/Today'
 import { HabitsPage } from './pages/Habits'
 import { FocusPage } from './pages/Focus'
 import { NotesPage } from './pages/Notes'
+import { WordsPage } from './pages/Words'
 import { BillsPage } from './pages/Bills'
 import { ReviewPage } from './pages/Review'
 import { SettingsPage } from './pages/Settings'
@@ -16,23 +17,34 @@ import { useWakeLock } from './hooks/useWakeLock'
 import { applyBackupReminder, applyDailyReminder, notifyGuardHit } from './core/nativeNotify'
 import { GUARD_LABEL, guardApp, readForeground } from './core/guard'
 
-type TabKey = 'today' | 'habits' | 'focus' | 'notes' | 'bills' | 'review' | 'settings'
+type TabKey = 'today' | 'habits' | 'focus' | 'notes' | 'words' | 'bills' | 'review' | 'settings'
 
+// 底部导航固定一行七个；设置改走右上角齿轮，不占 tab
 const NAV: { key: TabKey; label: string; icon: IconName }[] = [
   { key: 'today', label: '今日', icon: 'today' },
   { key: 'habits', label: '习惯', icon: 'habit' },
   { key: 'focus', label: '专注', icon: 'focus' },
   { key: 'notes', label: '记录', icon: 'note' },
+  { key: 'words', label: '单词', icon: 'word' },
   { key: 'bills', label: '记账', icon: 'bill' },
   { key: 'review', label: '复盘', icon: 'chart' },
-  { key: 'settings', label: '设置', icon: 'settings' },
 ]
+
+const SETTINGS_TAB: { key: TabKey; label: string; icon: IconName } = {
+  key: 'settings',
+  label: '设置',
+  icon: 'settings',
+}
+
+function isTabKey(h: string): h is TabKey {
+  return h === 'settings' || NAV.some((n) => n.key === h)
+}
 
 export default function App() {
   const { data, ready, justFinished, actions, focusPrompt } = useStore()
   const [tab, setTabState] = useState<TabKey>(() => {
     const h = location.hash.replace('#', '')
-    return NAV.some((n) => n.key === h) ? (h as TabKey) : 'today'
+    return isTabKey(h) ? h : 'today'
   })
   const [pendingTab, setPendingTab] = useState<TabKey | null>(null)
 
@@ -66,7 +78,7 @@ export default function App() {
   useEffect(() => {
     const onHash = () => {
       const h = location.hash.replace('#', '')
-      if (!NAV.some((n) => n.key === h)) return
+      if (!isTabKey(h)) return
       // 直接改地址栏或按浏览器后退，同样要经过确认，不能绕开专注
       if (focusLocked && h !== 'focus') {
         setPendingTab(h as TabKey)
@@ -74,7 +86,7 @@ export default function App() {
         history.replaceState(null, '', '#focus')
         return
       }
-      setTabState(h as TabKey)
+      setTabState(h)
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -128,7 +140,7 @@ export default function App() {
 
   if (!ready) return <div className="page" />
 
-  const current = NAV.find((n) => n.key === tab)!
+  const current = NAV.find((n) => n.key === tab) ?? SETTINGS_TAB
 
   return (
     <div className="app">
@@ -158,22 +170,37 @@ export default function App() {
         <div className="sidebar-foot">
           <div className="eyebrow">今天</div>
           <div className="num">{formatFull(todayKey())}</div>
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 8, paddingLeft: 0 }} onClick={() => actions.updateSettings({ theme: data.settings.theme === 'dark' ? 'light' : 'dark' })}>
-            {data.settings.theme === 'dark' ? '切换浅色' : '切换深色'}
-          </button>
+          <div className="row" style={{ marginTop: 8, gap: 4 }}>
+            <button className="btn btn-ghost btn-sm" style={{ paddingLeft: 0 }} onClick={() => actions.updateSettings({ theme: data.settings.theme === 'dark' ? 'light' : 'dark' })}>
+              {data.settings.theme === 'dark' ? '切换浅色' : '切换深色'}
+            </button>
+            <button
+              className={`icon-btn${tab === 'settings' ? ' active' : ''}`}
+              style={tab === 'settings' ? { color: 'var(--text)', background: 'var(--surface-2)' } : undefined}
+              aria-label="设置"
+              onClick={() => go('settings')}
+            >
+              <Icon name="settings" size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 
       <main className="main">
         <header className="mobile-head">
           <h1>{current.label}</h1>
-          <button
-            className="icon-btn"
-            aria-label="切换主题"
-            onClick={() => actions.updateSettings({ theme: data.settings.theme === 'dark' ? 'light' : 'dark' })}
-          >
-            <Icon name="settings" size={17} />
-          </button>
+          <div className="row" style={{ gap: 2 }}>
+            <button
+              className="icon-btn"
+              aria-label="切换主题"
+              onClick={() => actions.updateSettings({ theme: data.settings.theme === 'dark' ? 'light' : 'dark' })}
+            >
+              <Icon name="theme" size={17} />
+            </button>
+            <button className="icon-btn" aria-label="设置" onClick={() => go('settings')}>
+              <Icon name="settings" size={17} />
+            </button>
+          </div>
         </header>
 
         <div className="page">
@@ -181,6 +208,7 @@ export default function App() {
           {tab === 'habits' && <HabitsPage />}
           {tab === 'focus' && <FocusPage />}
           {tab === 'notes' && <NotesPage />}
+          {tab === 'words' && <WordsPage />}
           {tab === 'bills' && <BillsPage />}
           {tab === 'review' && <ReviewPage />}
           {tab === 'settings' && <SettingsPage />}
