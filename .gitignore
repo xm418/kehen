@@ -27,6 +27,9 @@ android/.idea/
 *.iml
 *.hprof
 
+# 一次性脚本与抓取中间产物
+.tmp-*/
+
 # 系统与编辑器
 .DS_Store
 Thumbs.db
