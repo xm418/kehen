@@ -1,0 +1,289 @@
+// 全局数据类型定义
+export type DateKey = string // YYYY-MM-DD
+export type Stamp = string // ISO 时间戳
+
+/** 习惯的重复规则 */
+export type HabitSchedule =
+  | { type: 'daily' }
+  | { type: 'weekdays'; days: number[] } // 0=周日 … 6=周六
+  | { type: 'weekly'; times: number } // 每周几次
+
+export interface Habit {
+  id: string
+  name: string
+  note?: string
+  schedule: HabitSchedule
+  targetPerDay: number
+  createdAt: DateKey
+  archived: boolean
+  sort: number
+}
+
+export interface HabitLog {
+  habitId: string
+  date: DateKey
+  count: number
+  /** 事后补录的打卡，不算进连续天数，避免数字骗自己 */
+  backfill?: boolean
+}
+
+export type TimerMode = 'focus' | 'break'
+
+export interface FocusSession {
+  id: string
+  mode: TimerMode
+  plannedMinutes: number
+  minutes: number
+  startedAt: Stamp
+  endedAt: Stamp
+  subject?: string
+  completed: boolean
+  /** 这一段中途离开过几次 */
+  interruptions?: number
+  /** 这一段对应哪条每日计划（有的话，完成时自动勾掉） */
+  planItemId?: string
+}
+
+/** 学习记录，自带一轮间隔复习 */
+export interface StudyLog {
+  id: string
+  date: DateKey
+  title: string
+  subject: string
+  minutes: number
+  content: string
+  tags: string[]
+  createdAt: Stamp
+  reviewStage: number // 已完成的复习轮次，0 表示尚未开始
+  lastReviewedAt?: DateKey
+  nextReviewAt?: DateKey // 下次复习日期，为空表示无需复习
+}
+
+export interface KeyResult {
+  id: string
+  title: string
+  target: number
+  current: number
+  unit: string
+}
+
+export interface Goal {
+  id: string
+  title: string
+  horizon: 'week' | 'month' | 'quarter'
+  startDate: DateKey
+  dueDate: DateKey
+  krs: KeyResult[]
+  status: 'active' | 'done' | 'dropped'
+  createdAt: DateKey
+}
+
+export interface DailyReview {
+  date: DateKey
+  score: number // 1 - 5
+  wentWell: string
+  blocked: string
+  tomorrow: string
+}
+
+export interface WeeklyReview {
+  weekStart: DateKey
+  summary: string
+  adjusted: string
+  createdAt: Stamp
+}
+
+export interface PomodoroConfig {
+  focus: number
+  shortBreak: number
+  longBreak: number
+  rounds: number
+  autoStart: boolean
+}
+
+export type SyncMode = 'local' | 'cloud'
+
+/** 账号信息：token 只保存在本机，云端仅保存散列后的密码 */
+export interface AccountState {
+  email: string
+  token: string
+  userId?: string
+  loggedInAt?: Stamp
+}
+
+export interface SyncState {
+  mode: SyncMode
+  /** 留空表示同源 /api，部署到服务器后填完整地址 */
+  endpoint?: string
+  /** 本地一改就自动推送云端 */
+  autoSync: boolean
+}
+
+/** 监督机制的强度配置 */
+export interface SupervisionConfig {
+  /** 到点未完成时弹出强制拦截层 */
+  intercept: boolean
+  /** 每天几点之后算「到点」 */
+  deadlineHour: number
+  /** 断签后尝试系统通知 */
+  notify: boolean
+  /** 未完成按比例累积欠账 */
+  debt: boolean
+  /** 连续断签达到阈值后锁住新增习惯 */
+  lock: boolean
+  lockAfterMiss: number
+}
+
+/** 专注期间的防干扰设置 */
+export interface FocusGuardConfig {
+  /** 专注时切换页面要确认 */
+  lock: boolean
+  /** 专注时保持屏幕常亮 */
+  keepAwake: boolean
+}
+
+/** 娱乐戒断：专注时盯住的三类应用 */
+export type GuardCategory = 'video' | 'game' | 'novel'
+
+export interface GuardConfig {
+  /** 专注进行中监控手机前台应用（仅 APK 内生效） */
+  enabled: boolean
+  video: boolean
+  game: boolean
+  novel: boolean
+}
+
+/** 一次破戒：专注期间被发现用娱乐应用 */
+export interface GuardLog {
+  id: string
+  date: DateKey
+  at: Stamp
+  pkg: string
+  appName: string
+  category: GuardCategory
+  /** 连续停留了多久（秒） */
+  seconds: number
+}
+
+/** 备份提醒：数据只在本机，隔太久没导出就提醒一次 */
+export interface BackupConfig {
+  enabled: boolean
+  /** 最后一次导出备份的时间 */
+  lastExportedAt?: Stamp
+}
+
+export interface Settings {
+  nickname: string
+  theme: 'light' | 'dark'
+  pomodoro: PomodoroConfig
+  sync: SyncState
+  account?: AccountState
+  supervision: SupervisionConfig
+  focus: FocusGuardConfig
+  guard: GuardConfig
+  backup: BackupConfig
+  defaultFocusSubject: string
+}
+
+/** 一笔欠账：某天没做完的份额 */
+export interface HabitDebt {
+  id: string
+  habitId: string
+  habitName: string
+  date: DateKey
+  /** 欠下的次数 */
+  amount: number
+  /** 已经补回的次数 */
+  repaid: number
+  createdAt: Stamp
+}
+
+/** 强制拦截时写下的「我确实没做」的原因 */
+export interface InterceptRecord {
+  id: string
+  date: DateKey
+  habitId: string
+  habitName: string
+  reason: string
+  createdAt: Stamp
+}
+
+/** 断签触发的补救任务，未完成前锁住新增习惯 */
+export interface RemedialTask {
+  id: string
+  habitId: string
+  habitName: string
+  /** 触发当日 */
+  date: DateKey
+  missedDays: number
+  done: boolean
+  createdAt: Stamp
+  doneAt?: Stamp
+}
+
+/** 每日计划里的一条 */
+export interface PlanItem {
+  id: string
+  text: string
+  done: boolean
+  /** 当天临时加的，不是前一晚写好的 */
+  temp?: boolean
+  /** 从哪个目标拆下来的，用来回看目标推进情况 */
+  goalId?: string
+}
+
+/** 某一天的计划：通常在前一天晚上写好，当天还可以临时追加 */
+export interface DailyPlan {
+  date: DateKey
+  items: PlanItem[]
+}
+
+/** 记账：一笔收入或支出 */
+export type ExpenseType = 'expense' | 'income'
+
+export interface Expense {
+  id: string
+  date: DateKey
+  /** 金额，永远是正数，方向由 type 决定 */
+  amount: number
+  type: ExpenseType
+  category: string
+  note?: string
+  createdAt: Stamp
+}
+
+/** 计时器状态：只存「开始时的时间点」，避免每秒写库 */
+export interface TimerState {
+  running: boolean
+  mode: TimerMode
+  plannedSeconds: number
+  /** 暂停时剩余秒数 */
+  remainSeconds: number
+  /** 运行中：计时开始的时间戳 */
+  startedAt?: Stamp
+  subject?: string
+  round: number
+  /** 这一段专注中途离开过几次 */
+  interruptions?: number
+  /** 这一段对准哪条每日计划 */
+  planItemId?: string
+}
+
+export interface AppData {
+  version: number
+  habits: Habit[]
+  habitLogs: HabitLog[]
+  sessions: FocusSession[]
+  studyLogs: StudyLog[]
+  goals: Goal[]
+  dailyReviews: DailyReview[]
+  weeklyReviews: WeeklyReview[]
+  debts: HabitDebt[]
+  intercepts: InterceptRecord[]
+  remedials: RemedialTask[]
+  plans: DailyPlan[]
+  expenses: Expense[]
+  guardLogs: GuardLog[]
+  settings: Settings
+  timer: TimerState
+}

@@ -1,0 +1,32 @@
+# 依赖与构建产物
+node_modules/
+dist/
+.screenshots/
+.trae-html-share-packages/
+.uploads/
+
+# 本地数据与密钥：不要外传
+server/data.json
+server/data.json.tmp
+server/data/
+server/public/*.apk
+
+# 安装包与备份文件
+*.apk
+*.aab
+
+# Android 构建产物
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/build/
+android/.idea/
+*.iml
+*.hprof
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
