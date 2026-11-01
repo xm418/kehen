@@ -159,6 +159,7 @@ export interface DictResult {
   phonetic: string
   audio: string
   meaning: string
+  example: string
 }
 
 export async function dictLookup(
@@ -167,12 +168,20 @@ export async function dictLookup(
   word: string,
 ): Promise<DictResult | null> {
   try {
-    const res = await request<{ ok: boolean; phonetic?: string; audio?: string; meaning?: string }>(
-      `${apiBase(endpoint)}/dict?word=${encodeURIComponent(word)}`,
-      { headers: authHeaders(token) },
-    )
+    const res = await request<{
+      ok: boolean
+      phonetic?: string
+      audio?: string
+      meaning?: string
+      example?: string
+    }>(`${apiBase(endpoint)}/dict?word=${encodeURIComponent(word)}`, { headers: authHeaders(token) })
     if (!res.ok) return null
-    return { phonetic: res.phonetic ?? '', audio: res.audio ?? '', meaning: res.meaning ?? '' }
+    return {
+      phonetic: res.phonetic ?? '',
+      audio: res.audio ?? '',
+      meaning: res.meaning ?? '',
+      example: res.example ?? '',
+    }
   } catch {
     return null
   }

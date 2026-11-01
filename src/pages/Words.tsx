@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/Icons'
 import { Sheet, Field } from '../components/Sheet'
 import { useStore } from '../state/store'
@@ -7,23 +7,70 @@ import { speakWord } from '../core/speech'
 import { dictLookup } from '../core/storage/cloudAdapter'
 import type { WordItem } from '../core/types'
 
+const AUTO_SPEAK_KEY = 'kedu:wordAutoSpeak'
+
+function readAutoSpeak(): boolean {
+  try {
+    return localStorage.getItem(AUTO_SPEAK_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
 export function WordsPage() {
   const { data, actions } = useStore()
   const words = data.words
 
-  const familiarCount = words.filter((w) => w.familiar === 1).length
+  // 分组列表（保持出现顺序）
+  const groups = useMemo(() => {
+    const seen: string[] = []
+    for (const w of words) {
+      const g = w.group ?? ''
+      if (!seen.includes(g)) seen.push(g)
+    }
+    return seen
+  }, [words])
+
+  const [group, setGroup] = useState<string | null>(null) // null = 全部
+  const scoped = useMemo(
+    () => (group === null ? words : words.filter((w) => (w.group ?? '') === group)),
+    [words, group],
+  )
+
+  const familiarCount = scoped.filter((w) => w.familiar === 1).length
+  const progressPct = scoped.length > 0 ? Math.round((familiarCount / scoped.length) * 100) : 0
 
   // 待学队列：不认识的排前面，其次按加入顺序
   const queue = useMemo(
     () =>
-      words
+      scoped
         .filter((w) => w.familiar === 0)
         .sort((a, b) => b.reviewCount - a.reviewCount || (a.addedAt < b.addedAt ? -1 : 1)),
-    [words],
+    [scoped],
   )
   const [cursor, setCursor] = useState(0)
   const [flipped, setFlipped] = useState(false)
+  const [autoSpeak, setAutoSpeak] = useState(readAutoSpeak)
   const current: WordItem | undefined = queue.length > 0 ? queue[cursor % queue.length] : undefined
+
+  // 卡片出现时自动发音（不背单词的体验）
+  const currentId = current?.id
+  useEffect(() => {
+    if (currentId && autoSpeak && current) speakWord(current.word)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, autoSpeak])
+
+  const toggleAutoSpeak = () => {
+    setAutoSpeak((v) => {
+      const next = !v
+      try {
+        localStorage.setItem(AUTO_SPEAK_KEY, next ? '1' : '0')
+      } catch {
+        /* 忽略 */
+      }
+      return next
+    })
+  }
 
   const nextCard = () => {
     setFlipped(false)
@@ -47,6 +94,7 @@ export function WordsPage() {
   /* ------------------------------ 导入 ------------------------------ */
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
+  const [importGroup, setImportGroup] = useState('')
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -56,6 +104,8 @@ export function WordsPage() {
       setProgress('没解析到单词，一行一个试试')
       return
     }
+    const g = importGroup.trim()
+    if (g) for (const s of seeds) s.group = g
     setImporting(true)
     try {
       // 缺音标/释义的词，登录状态下尽量从词典补全（最多补 40 个，免得等太久）
@@ -69,6 +119,7 @@ export function WordsPage() {
           if (r) {
             if (!limit[i].phonetic && r.phonetic) limit[i].phonetic = r.phonetic
             if (!limit[i].meaning && r.meaning) limit[i].meaning = r.meaning
+            if (!limit[i].example && r.example) limit[i].example = r.example
           }
         }
       }
@@ -102,7 +153,7 @@ export function WordsPage() {
     <div className="stack" style={{ gap: 16 }}>
       <div className="row-between">
         <div className="muted" style={{ fontSize: 13 }}>
-          共 {words.length} 词 · 已熟 {familiarCount} · 待学 {queue.length}
+          共 {scoped.length} 词 · 已熟 {familiarCount} · 待学 {queue.length}
         </div>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn btn-sm" onClick={() => setImportOpen(true)}>
@@ -113,6 +164,41 @@ export function WordsPage() {
           </button>
         </div>
       </div>
+
+      {/* 分组筛选：按词书/单元学 */}
+      {groups.length > 1 ? (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <button className={`pill${group === null ? ' active' : ''}`} onClick={() => setGroup(null)}>
+            全部
+          </button>
+          {groups.map((g) => (
+            <button
+              key={g || '(empty)'}
+              className={`pill${group === g ? ' active' : ''}`}
+              onClick={() => {
+                setGroup(g)
+                setCursor(0)
+                setFlipped(false)
+              }}
+            >
+              {g || '未分组'}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {/* 学习进度 */}
+      {scoped.length > 0 ? (
+        <div>
+          <div className="row-between" style={{ fontSize: 12, marginBottom: 4 }}>
+            <span className="muted">学习进度</span>
+            <span className="num muted">{progressPct}%</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 999, background: 'var(--surface-2)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--ink)' }} />
+          </div>
+        </div>
+      ) : null}
 
       {progress && !importOpen ? <div className="muted" style={{ fontSize: 12.5 }}>{progress}</div> : null}
 
@@ -135,7 +221,10 @@ export function WordsPage() {
               </button>
             </div>
             {flipped ? (
-              <div className="word-meaning">{current.meaning || '（还没有释义，导入时可以补）'}</div>
+              <>
+                <div className="word-meaning">{current.meaning || '（还没有释义，导入时可以补）'}</div>
+                {current.example ? <div className="word-example">{current.example}</div> : null}
+              </>
             ) : (
               <div className="card-sub" style={{ marginTop: 8 }}>
                 点卡片看释义
@@ -162,6 +251,20 @@ export function WordsPage() {
               认识
             </button>
           </div>
+          <div className="row-between" style={{ marginTop: 10 }}>
+            <span className="muted" style={{ fontSize: 11.5 }}>
+              {current.group ? `${current.group} · ` : ''}第 {queue.length === 0 ? 0 : (cursor % queue.length) + 1} / {queue.length} 词
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleAutoSpeak()
+              }}
+            >
+              自动发音{autoSpeak ? '：开' : '：关'}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="card flat empty">
@@ -170,10 +273,10 @@ export function WordsPage() {
       )}
 
       {/* 全部单词 */}
-      {words.length > 0 ? (
+      {scoped.length > 0 ? (
         <div className="stack" style={{ gap: 8 }}>
           <div className="eyebrow">全部单词</div>
-          {[...words]
+          {[...scoped]
             .sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1))
             .map((w) => (
               <div key={w.id} className="log-card">
@@ -187,6 +290,7 @@ export function WordsPage() {
                         <span className="log-title" style={{ fontSize: 14 }}>{w.word}</span>
                         {w.phonetic ? <span className="word-phonetic">{w.phonetic}</span> : null}
                         {w.familiar === 1 ? <span className="tag">已熟</span> : null}
+                        {w.group ? <span className="tag">{w.group}</span> : null}
                       </div>
                       {w.meaning ? <div className="log-meta" style={{ marginTop: 2 }}>{w.meaning}</div> : null}
                     </div>
@@ -228,6 +332,14 @@ export function WordsPage() {
               placeholder={'abandon /əˈbændən/ v. 放弃\nability n. 能力\nstudy'}
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
+            />
+          </Field>
+          <Field label="分组（选填，如：必考词 U1）">
+            <input
+              className="input"
+              value={importGroup}
+              placeholder="留空表示未分组"
+              onChange={(e) => setImportGroup(e.target.value)}
             />
           </Field>
           <div className="row" style={{ gap: 8 }}>

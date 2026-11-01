@@ -289,6 +289,10 @@ export interface WordItem {
   word: string
   phonetic?: string
   meaning?: string
+  /** 例句（词典补全时顺手带的） */
+  example?: string
+  /** 分组：词书/单元，如「必考词 U1」 */
+  group?: string
   /** 1 表示已经认识，不再进学习队列 */
   familiar: 0 | 1
   addedAt: Stamp

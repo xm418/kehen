@@ -4,6 +4,9 @@ export interface WordSeed {
   word: string
   phonetic?: string
   meaning?: string
+  example?: string
+  /** 分组：词书/单元，如「必考词 U1」 */
+  group?: string
 }
 
 /** 考研高频词约 120 个，词 + 音标 + 释义，一键载入当开箱词库 */

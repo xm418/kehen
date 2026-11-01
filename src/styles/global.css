@@ -1255,6 +1255,14 @@ a {
   line-height: 1.7;
 }
 
+.word-example {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+  font-style: italic;
+}
+
 /* 搜索命中标记 */
 mark.hl {
   background: color-mix(in srgb, var(--ink) 16%, transparent);

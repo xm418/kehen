@@ -669,16 +669,27 @@ async function handleDict(req, res, user) {
       ? (entry.phonetics.find((p) => p && p.audio)?.audio ?? '')
       : ''
     let meaning = ''
+    let example = ''
     if (Array.isArray(entry.meanings)) {
       for (const m of entry.meanings) {
-        const def = m?.definitions?.[0]?.definition
-        if (def) {
-          meaning = `${m.partOfSpeech ? m.partOfSpeech + '. ' : ''}${def}`
-          break
+        if (!meaning) {
+          const def = m?.definitions?.[0]?.definition
+          if (def) meaning = `${m.partOfSpeech ? m.partOfSpeech + '. ' : ''}${def}`
         }
+        if (!example && Array.isArray(m?.definitions)) {
+          const ex = m.definitions.find((d) => d && d.example)?.example
+          if (ex) example = ex
+        }
+        if (meaning && example) break
       }
     }
-    return send(res, 200, { ok: true, phonetic: phonetic || '', audio: audio || '', meaning: meaning || '' })
+    return send(res, 200, {
+      ok: true,
+      phonetic: phonetic || '',
+      audio: audio || '',
+      meaning: meaning || '',
+      example: example || '',
+    })
   } catch {
     return send(res, 200, { ok: false })
   } finally {

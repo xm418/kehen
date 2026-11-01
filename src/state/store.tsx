@@ -126,7 +126,7 @@ export interface StoreActions {
   clearGuardLogs: () => void
 
   /** 批量加单词（按 word 去重），返回实际加了多少个 */
-  addWords: (items: { word: string; phonetic?: string; meaning?: string }[]) => number
+  addWords: (items: { word: string; phonetic?: string; meaning?: string; example?: string; group?: string }[]) => number
   removeWord: (id: string) => void
   /** 标记认识/不认识；不认识会顺手累一次复习计数 */
   setWordFamiliar: (id: string, familiar: 0 | 1) => void
@@ -818,6 +818,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               word,
               phonetic: item.phonetic || undefined,
               meaning: item.meaning || undefined,
+              example: item.example || undefined,
+              group: item.group || undefined,
               familiar: 0,
               addedAt: now,
               reviewCount: 0,
