@@ -506,6 +506,27 @@ a {
   border-color: var(--ink);
 }
 
+/* 单词分组：一整排横向滑动，不再换行堆成好几排 */
+.pill-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0 -16px;
+  padding: 2px 16px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pill-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.pill-scroll > .pill {
+  flex: none;
+}
+
 .empty {
   padding: 26px 10px;
   text-align: center;

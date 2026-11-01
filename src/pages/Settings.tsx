@@ -27,6 +27,7 @@ export function SettingsPage() {
   const snaps = useMemo(() => listSnapshots(), [data])
   const pomodoro = data.settings.pomodoro
   const focus = data.settings.focus
+  const wordGoal = data.settings.words.dailyGoal
 
   const [importError, setImportError] = useState('')
 
@@ -221,6 +222,40 @@ export function SettingsPage() {
               value={data.settings.defaultFocusSubject}
               onChange={(e) => actions.updateSettings({ defaultFocusSubject: e.target.value })}
             />
+          </Field>
+        </div>
+      </section>
+
+      <section className="card" style={{ marginBottom: 12 }}>
+        <div className="card-head">
+          <div>
+            <h3 className="card-title">单词学习</h3>
+            <div className="card-sub">每天给自己定个量，单词页会按这个算今日进度</div>
+          </div>
+        </div>
+        <div className="stack">
+          <Field label="每天学习多少个单词">
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                className="input num"
+                style={{ maxWidth: 92 }}
+                value={wordGoal}
+                onChange={(e) => {
+                  const n = Number(e.target.value.replace(/[^\d]/g, '')) || 30
+                  actions.updateSettings({ words: { dailyGoal: Math.min(300, Math.max(1, n)) } })
+                }}
+              />
+              {[20, 30, 50, 100].map((n) => (
+                <button
+                  key={n}
+                  className={`pill${wordGoal === n ? ' active' : ''}`}
+                  onClick={() => actions.updateSettings({ words: { dailyGoal: n } })}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div className="card-sub">按能长期坚持的量定，一下定太多反而容易断</div>
           </Field>
         </div>
       </section>

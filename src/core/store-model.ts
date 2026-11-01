@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   guard: { ...DEFAULT_GUARD },
   backup: { ...DEFAULT_BACKUP },
   defaultFocusSubject: '专业学习',
+  words: { dailyGoal: 30 },
 }
 
 /** 首次使用时的初始数据：只放最少的两条，其余交给用户自己定义 */
@@ -83,6 +84,7 @@ export function createInitialData(): AppData {
     guardLogs: [],
     documents: [],
     words: [],
+    wordProgress: { date: now, count: 0 },
     settings: { ...DEFAULT_SETTINGS },
     timer: {
       running: false,
@@ -115,6 +117,10 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
     guardLogs: raw.guardLogs ?? [],
     documents: raw.documents ?? [],
     words: raw.words ?? [],
+    wordProgress:
+      raw.wordProgress && raw.wordProgress.date === todayKey()
+        ? raw.wordProgress
+        : { date: todayKey(), count: 0 },
     settings: {
       ...base.settings,
       ...(raw.settings ?? {}),
@@ -124,6 +130,7 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
       focus: { ...base.settings.focus, ...(raw.settings?.focus ?? {}) },
       guard: { ...base.settings.guard, ...(raw.settings?.guard ?? {}) },
       backup: { ...base.settings.backup, ...(raw.settings?.backup ?? {}) },
+      words: { ...base.settings.words, ...(raw.settings?.words ?? {}) },
     },
     timer: { ...base.timer, ...(raw.timer ?? {}) },
   }

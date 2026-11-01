@@ -3,6 +3,7 @@ import { Icon } from '../components/Icons'
 import { Sheet, Field } from '../components/Sheet'
 import { WordDetailSheet, WordEntries } from '../components/WordDetailSheet'
 import { useStore } from '../state/store'
+import { useTodayKey } from '../hooks/useClock'
 import { KAOYAN_WORDS, parseWordLines, type WordSeed } from '../core/wordbank'
 import { speakWord } from '../core/speech'
 import { dictLookup } from '../core/storage/cloudAdapter'
@@ -22,6 +23,10 @@ function readAutoSpeak(): boolean {
 export function WordsPage() {
   const { data, actions } = useStore()
   const words = data.words
+  const today = useTodayKey()
+  const dailyGoal = data.settings.words.dailyGoal
+  const studiedToday = data.wordProgress.date === today ? data.wordProgress.count : 0
+  const goalLeft = Math.max(0, dailyGoal - studiedToday)
 
   // 分组列表（保持出现顺序）
   const groups = useMemo(() => {
@@ -204,8 +209,17 @@ export function WordsPage() {
   return (
     <div className="stack" style={{ gap: 16 }}>
       <div className="row-between">
-        <div className="muted" style={{ fontSize: 13 }}>
-          共 {scoped.length} 词 · 已熟 {familiarCount} · 待学 {queue.length}
+        <div style={{ minWidth: 0 }}>
+          <div className="muted" style={{ fontSize: 13 }}>
+            共 {scoped.length} 词 · 已熟 {familiarCount} · 待学 {queue.length}
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+            今日已学{' '}
+            <span className="num" style={{ color: 'var(--text)' }}>
+              {studiedToday}
+            </span>{' '}
+            / <span className="num">{dailyGoal}</span> 词{goalLeft > 0 ? ` · 还差 ${goalLeft} 词` : ' · 今日达标'}
+          </div>
         </div>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn btn-sm" onClick={() => setImportOpen(true)}>
@@ -217,9 +231,9 @@ export function WordsPage() {
         </div>
       </div>
 
-      {/* 分组筛选：按词书/单元学 */}
+      {/* 分组筛选：一行横向滑动，分组再多也不会把卡片挤下去 */}
       {groups.length > 1 ? (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="pill-scroll">
           <button className={`pill${group === null ? ' active' : ''}`} onClick={() => setGroup(null)}>
             全部
           </button>

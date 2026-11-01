@@ -174,6 +174,12 @@ export interface BackupConfig {
   lastExportedAt?: Stamp
 }
 
+/** 单词模块的偏好 */
+export interface WordSettings {
+  /** 每天打算学多少个单词 */
+  dailyGoal: number
+}
+
 export interface Settings {
   nickname: string
   theme: 'light' | 'dark'
@@ -185,6 +191,13 @@ export interface Settings {
   guard: GuardConfig
   backup: BackupConfig
   defaultFocusSubject: string
+  words: WordSettings
+}
+
+/** 今天已经学过的单词数，跨天自动归零 */
+export interface WordProgress {
+  date: DateKey
+  count: number
 }
 
 /** 一笔欠账：某天没做完的份额 */
@@ -303,6 +316,7 @@ export interface WordItem {
 export interface AppData {
   version: number
   words: WordItem[]
+  wordProgress: WordProgress
   habits: Habit[]
   habitLogs: HabitLog[]
   sessions: FocusSession[]

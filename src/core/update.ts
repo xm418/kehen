@@ -2,8 +2,8 @@ import { registerPlugin } from '@capacitor/core'
 import { apiBase, endpointReady, ENDPOINT_HINT } from './storage/cloudAdapter'
 import { isNativeApp } from './nativeNotify'
 
-/** 打包时手动跟着 android versionName 改 */
-export const APP_VERSION = '1.3'
+/** 构建时自动从 android/app/build.gradle 读取，不用再手改 */
+export const APP_VERSION = __APP_VERSION__
 
 export interface UpdateInfo {
   version: string

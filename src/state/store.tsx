@@ -855,6 +855,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (!w) return d
           w.familiar = familiar
           if (familiar === 0) w.reviewCount += 1
+          // 每学一个词记一次，跨天自动归零，单词页按这个算今日进度
+          const today = todayKey()
+          d.wordProgress =
+            d.wordProgress && d.wordProgress.date === today
+              ? { ...d.wordProgress, count: d.wordProgress.count + 1 }
+              : { date: today, count: 1 }
           return d
         })
       },
