@@ -10,7 +10,7 @@ import { exportToFile } from '../core/storage/localAdapter'
 import { listSnapshots, readSnapshot, takeSnapshot } from '../core/backup'
 import { PLAN_KEEP_DAYS } from '../core/store-model'
 import { readWordVoice, writeWordVoice, type WordVoice } from '../core/speech'
-import type { AppData } from '../core/types'
+import type { AppData, DailyPlan } from '../core/types'
 
 function csvCell(value: string | number): string {
   const s = String(value)
@@ -42,6 +42,36 @@ export function SettingsPage() {
   const exportJson = () => {
     exportToFile(JSON.stringify(data, null, 2), `刻痕备份-${today}.json`)
     actions.markBackedUp()
+  }
+
+  /** 只导入计划：支持完整备份（取其中的 plans）或单独的 { plans: [...] } / 数组 */
+  const importPlanFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown
+      const list = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object' && Array.isArray((parsed as { plans?: unknown }).plans)
+          ? (parsed as { plans: unknown[] }).plans
+          : null
+      if (!list) {
+        setImportError('没在文件里找到计划（需要是刻痕备份，或包含 plans 数组）')
+        return
+      }
+      const valid = (list as DailyPlan[]).filter(
+        (p) => p && typeof p.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && Array.isArray(p.items),
+      )
+      if (valid.length === 0) {
+        setImportError('这个文件里没有可导入的计划')
+        return
+      }
+      const count = valid.reduce((n, p) => n + p.items.length, 0)
+      if (!confirm(`导入 ${valid.length} 天的计划（共 ${count} 条）？同一天已有的计划会合并，现有计划不会被清空。`)) return
+      actions.importPlans(valid)
+      setImportError(`已导入 ${valid.length} 天计划，同一张计划里的重复条目已跳过`)
+    } catch {
+      setImportError('这个文件不是有效的计划文件')
+    }
   }
 
   const exportStudies = () =>
@@ -379,6 +409,19 @@ export function SettingsPage() {
                 } catch {
                   setImportError('这个文件不是有效的刻痕备份')
                 }
+              }}
+            />
+          </label>
+          <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+            导入计划
+            <input
+              type="file"
+              accept="application/json"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                void importPlanFile(file)
               }}
             />
           </label>

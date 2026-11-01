@@ -27,11 +27,12 @@ import {
   saveLocalBlob,
 } from '../core/files'
 import { isHabitCreationLocked, reconcileSupervision } from '../core/supervision'
-import { createInitialData, normalizeData, REVIEW_INTERVALS } from '../core/store-model'
+import { createInitialData, normalizeData, PLAN_KEEP_DAYS, REVIEW_INTERVALS } from '../core/store-model'
 import { addDays, todayKey } from '../core/date'
 import { uid } from '../core/id'
 import type {
   AppData,
+  DailyPlan,
   DailyReview,
   DateKey,
   DocumentMeta,
@@ -104,6 +105,8 @@ export interface StoreActions {
   setTimerPlan: (planItemId?: string, subject?: string) => void
   /** 往某一天的计划里加一条；temp 表示当天临时加的，goalId 表示从目标拆下来的 */
   addPlanItem: (date: DateKey, text: string, temp?: boolean, goalId?: string) => void
+  /** 从计划文件导入：按日期合并，同一天已有的条目保留，重复文案跳过 */
+  importPlans: (plans: DailyPlan[]) => void
   togglePlanItem: (date: DateKey, id: string) => void
   removePlanItem: (date: DateKey, id: string) => void
 
@@ -621,6 +624,39 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             temp: temp || undefined,
             goalId,
           })
+          return d
+        })
+      },
+      importPlans(input) {
+        update((d) => {
+          for (const raw of input) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) continue
+            const items = (raw.items ?? []).filter((i) => i && typeof i.text === 'string' && i.text.trim())
+            if (items.length === 0) continue
+            let plan = d.plans.find((p) => p.date === raw.date)
+            if (!plan) {
+              plan = { date: raw.date, items: [] }
+              d.plans.push(plan)
+            }
+            const seenText = new Set(plan.items.map((i) => i.text.trim()))
+            const seenId = new Set(plan.items.map((i) => i.id))
+            for (const item of items) {
+              const text = item.text.trim()
+              if (seenText.has(text)) continue
+              seenText.add(text)
+              plan.items.push({
+                id: item.id && !seenId.has(item.id) ? item.id : uid('p'),
+                text,
+                done: !!item.done,
+                temp: item.temp || undefined,
+                goalId: item.goalId,
+              })
+            }
+          }
+          d.plans.sort((a, b) => (a.date < b.date ? -1 : 1))
+          // 和加载时一样，只留最近 PLAN_KEEP_DAYS 天，免得旧计划把数据撑大
+          const cutoff = addDays(todayKey(), -PLAN_KEEP_DAYS)
+          d.plans = d.plans.filter((p) => p.date >= cutoff)
           return d
         })
       },
