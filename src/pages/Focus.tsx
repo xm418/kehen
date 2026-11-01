@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../state/store'
 import { useTimerSeconds, useTodayKey } from '../hooks/useClock'
 import { focusByDay, focusMinutesOn, isCleanSession, sessionDate } from '../core/stats'
-import { timeToText, weekdayLabel, minutesToText } from '../core/date'
+import { addDays, formatShort, timeToText, weekdayLabel, minutesToText } from '../core/date'
 import { SparkBars, BarList } from '../components/Charts'
 import type { TimerMode } from '../core/types'
 
@@ -21,6 +21,13 @@ export function FocusPage() {
   const totalMin = focusMinutesOn(data.sessions, today)
   // 中断两次以上的那段还计入时长，但不再算「完整番茄」
   const cleanCount = todaySessions.filter(isCleanSession).length
+  // 今天之前的 6 天，方便回看这几段专注做了什么
+  const pastSessions = data.sessions
+    .filter((s) => {
+      const key = sessionDate(s.startedAt)
+      return s.mode === 'focus' && key < today && key >= addDays(today, -6)
+    })
+    .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1))
   const trend = focusByDay(data.sessions, today, 7)
   // 今天还没勾掉的计划，可以直接挑一条作为这一段专注的目标
   const openPlan = (data.plans.find((p) => p.date === today)?.items ?? []).filter((i) => !i.done)
@@ -267,6 +274,32 @@ export function FocusPage() {
           ))
         )}
       </section>
+      {pastSessions.length > 0 ? (
+        <section className="card" style={{ marginTop: 12 }}>
+          <div className="card-head">
+            <h3 className="card-title">前 6 天的专注</h3>
+            <span className="num muted" style={{ fontSize: 12 }}>
+              {pastSessions.length} 段
+            </span>
+          </div>
+          {pastSessions.slice(0, 12).map((s) => (
+            <div className="session-row" key={s.id}>
+              <span>
+                {formatShort(sessionDate(s.startedAt))} · {s.subject || '未命名'}
+              </span>
+              <span className="num muted">
+                {s.minutes} 分钟
+                {(s.interruptions ?? 0) > 0 ? ` · 中断 ${s.interruptions} 次` : ''}
+              </span>
+            </div>
+          ))}
+          {pastSessions.length > 12 ? (
+            <div className="card-sub" style={{ marginTop: 8 }}>
+              只显示最近 12 段，更早的记录不再列出。
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </>
   )
 }

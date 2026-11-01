@@ -150,8 +150,8 @@ export function NotesPage() {
         />
       </div>
 
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-        {subjects.slice(0, 8).map((s) => (
+      <div className="pill-scroll" style={{ marginBottom: 6 }}>
+        {subjects.map((s) => (
           <button key={s} className={`pill${subject === s ? ' active' : ''}`} onClick={() => setSubject(s)}>
             {s}
           </button>
@@ -159,9 +159,9 @@ export function NotesPage() {
       </div>
 
       {tags.length > 0 ? (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          <span className="eyebrow" style={{ alignSelf: 'center', marginRight: 2 }}>标签</span>
-          {tags.slice(0, 12).map((t) => (
+        <div className="pill-scroll" style={{ marginBottom: 10 }}>
+          <span className="eyebrow" style={{ alignSelf: 'center', marginRight: 2, flexShrink: 0 }}>标签</span>
+          {tags.map((t) => (
             <button
               key={t}
               className={`pill${tag === t ? ' active' : ''}`}

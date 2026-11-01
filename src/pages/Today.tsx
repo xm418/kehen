@@ -17,7 +17,7 @@ import { SupervisionPanel } from '../components/SupervisionPanel'
 import { DailyPoem } from '../components/DailyPoem'
 import { TodayPlanCard, TomorrowPlanCard } from '../components/PlanCards'
 
-type Tab = 'today' | 'habits' | 'focus' | 'notes' | 'review'
+type Tab = 'today' | 'habits' | 'focus' | 'notes' | 'words' | 'review'
 
 export function TodayPage({ goTo }: { goTo: (t: Tab) => void }) {
   const { data, actions } = useStore()
@@ -36,6 +36,14 @@ export function TodayPage({ goTo }: { goTo: (t: Tab) => void }) {
     ...data.habits.filter((h) => !h.archived).map((h) => habitStreak(h, data.habitLogs, today).current),
   )
   const trend = focusByDay(data.sessions, today, 7)
+
+  // 单词模块的今日进度，首页给一个入口，不用每次都切到单词页看
+  const wordGoal = data.settings.words.dailyGoal
+  const wordDone = data.wordProgress.date === today ? data.wordProgress.count : 0
+  const wordDue = data.words.filter(
+    (w) => w.familiar === 0 && (!w.nextReviewAt || w.nextReviewAt <= today),
+  ).length
+  const wordWrong = data.words.filter((w) => w.wrong).length
 
   const timer = data.timer
   const isBreak = timer.mode === 'break'
@@ -88,6 +96,38 @@ export function TodayPage({ goTo }: { goTo: (t: Tab) => void }) {
       </div>
 
       <TodayPlanCard onFocus={() => goTo('focus')} />
+
+      <section className="card" style={{ marginBottom: 12 }}>
+        <div className="row-between" style={{ marginBottom: 10 }}>
+          <div>
+            <h3 className="card-title">今天的单词</h3>
+            <div className="card-sub">
+              {data.words.length === 0
+                ? '词库还是空的，先去导入一本'
+                : `已学 ${wordDone}/${wordGoal} · 待学 ${wordDue} 个${wordWrong > 0 ? ` · 错词 ${wordWrong}` : ''}`}
+            </div>
+          </div>
+          <button className="btn btn-sm" onClick={() => goTo('words')}>
+            {wordDue > 0 ? `去背 ${wordDue} 个` : '打开单词本'}
+          </button>
+        </div>
+        {data.words.length > 0 ? (
+          <>
+            <div className="prog">
+              <div
+                className="prog-fill"
+                style={{ width: `${Math.min(100, Math.round((wordDone / Math.max(1, wordGoal)) * 100))}%` }}
+              />
+            </div>
+            <div className="row-between" style={{ marginTop: 6, fontSize: 12 }}>
+              <span className="muted">每日目标 {wordGoal} 个</span>
+              <span className="muted">
+                {wordDone >= wordGoal ? '今天已经够了' : `还差 ${wordGoal - wordDone} 个`}
+              </span>
+            </div>
+          </>
+        ) : null}
+      </section>
 
       <DailyPoem />
 
@@ -187,9 +227,16 @@ export function TodayPage({ goTo }: { goTo: (t: Tab) => void }) {
           <section className="card">
             <div className="row-between" style={{ marginBottom: 12 }}>
               <h3 className="card-title">今日学习</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => setStudyOpen(true)}>
-                ＋ 记一条
-              </button>
+              <div className="row" style={{ gap: 4 }}>
+                {todayLogs.length > 3 ? (
+                  <button className="btn btn-ghost btn-sm" onClick={() => goTo('notes')}>
+                    全部
+                  </button>
+                ) : null}
+                <button className="btn btn-ghost btn-sm" onClick={() => setStudyOpen(true)}>
+                  ＋ 记一条
+                </button>
+              </div>
             </div>
             {todayLogs.length === 0 ? (
               <div className="empty">今天还没记录。哪怕只写下三行，也比什么都不留强。</div>

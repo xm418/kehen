@@ -81,6 +81,8 @@ export interface NewExpenseInput {
 export interface StoreActions {
   toggleHabit: (habitId: string, date?: DateKey) => void
   stepHabit: (habitId: string, delta: number, date?: DateKey) => void
+  /** 直接设定某天的完成次数，用于补录（过去的日期会自动标记为补录） */
+  setHabitCount: (habitId: string, date: DateKey, count: number) => void
   addHabit: (input: NewHabitInput) => void
   updateHabit: (id: string, patch: Partial<Habit>) => void
   setHabitArchived: (id: string, archived: boolean) => void
@@ -468,6 +470,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (!habit) return d
           const cur = d.habitLogs.find((l) => l.habitId === habitId && l.date === key)?.count ?? 0
           touchLog(d, habitId, key, Math.max(0, Math.min(habit.targetPerDay, cur + delta)))
+          return d
+        })
+      },
+      setHabitCount(habitId, date, count) {
+        update((d) => {
+          const habit = d.habits.find((h) => h.id === habitId)
+          if (!habit) return d
+          touchLog(d, habitId, date, Math.max(0, Math.min(habit.targetPerDay, Math.round(count))))
           return d
         })
       },

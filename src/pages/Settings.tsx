@@ -96,6 +96,28 @@ export function SettingsPage() {
       'text/csv;charset=utf-8',
     )
 
+  const exportWords = () =>
+    exportToFile(
+      csvText(
+        ['分组', '单词', '音标', '释义', '复习轮次', '已掌握', '错词', '下次复习', '最近学习'],
+        [...data.words]
+          .sort((a, b) => (a.word < b.word ? -1 : 1))
+          .map((w) => [
+            w.group ?? '',
+            w.word,
+            w.phonetic ?? '',
+            w.meaning ?? '',
+            w.stage,
+            w.familiar === 1 ? '是' : '否',
+            w.wrong ? '是' : '否',
+            w.nextReviewAt ?? '',
+            w.lastStudiedAt ?? '',
+          ]),
+      ),
+      `刻痕-单词-${today}.csv`,
+      'text/csv;charset=utf-8',
+    )
+
   return (
     <>
       <div style={{ marginBottom: 16 }}>
@@ -331,6 +353,9 @@ export function SettingsPage() {
           </button>
           <button className="btn btn-sm" onClick={exportBills}>
             记账 CSV
+          </button>
+          <button className="btn btn-sm" onClick={exportWords}>
+            单词 CSV
           </button>
           <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
             导入 JSON

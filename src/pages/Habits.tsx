@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
-import { habitDayProgress, habitStreak, isHabitDone, isHabitScheduled } from '../core/stats'
-import { lastNDays } from '../core/date'
+import { habitCountOn, habitDayProgress, habitStreak, isHabitDone, isHabitScheduled } from '../core/stats'
+import { addDays, lastNDays, rangeKeys, startOfWeek } from '../core/date'
 import { Heatmap, Ring } from '../components/Charts'
 import { Sheet, Field, Segmented } from '../components/Sheet'
 import { Icon } from '../components/Icons'
@@ -145,6 +145,22 @@ export function HabitsPage() {
   const today = useTodayKey()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Habit | null>(null)
+  const [backfill, setBackfill] = useState<Habit | null>(null)
+  const [backfillDate, setBackfillDate] = useState(today)
+  const [backfillCount, setBackfillCount] = useState(1)
+
+  const openBackfill = (h: Habit) => {
+    const yesterday = addDays(today, -1)
+    setBackfill(h)
+    setBackfillDate(yesterday < h.createdAt ? h.createdAt : yesterday)
+    setBackfillCount(h.targetPerDay)
+  }
+
+  const saveBackfill = () => {
+    if (!backfill) return
+    actions.setHabitCount(backfill.id, backfillDate, backfillCount)
+    setBackfill(null)
+  }
 
   const active = data.habits.filter((h) => !h.archived)
   const archived = data.habits.filter((h) => h.archived)
@@ -213,6 +229,14 @@ export function HabitsPage() {
           const done = isHabitDone(h, data.habitLogs, today)
           // 「每周几次」的连续单位是周，写死「天」会误导
           const streakUnit = h.schedule.type === 'weekly' ? '周' : '天'
+          // 本周已经做满几次，让「每周几次」的习惯有明确进度
+          const weekCount =
+            h.schedule.type === 'weekly'
+              ? rangeKeys(startOfWeek(today), today).reduce(
+                  (n, key) => n + habitCountOn(data.habitLogs, h.id, key),
+                  0,
+                )
+              : 0
           return (
             <section className="card" key={h.id}>
               <div className="row-between" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
@@ -222,6 +246,7 @@ export function HabitsPage() {
                     {done ? <span className="tag">今天已完成</span> : null}
                   </div>
                   <div className="card-sub">
+                    {h.schedule.type === 'weekly' ? `本周 ${weekCount}/${h.schedule.times} 次 · ` : ''}
                     连续 {streak.current} {streakUnit} · 最长 {streak.longest} {streakUnit} · 近 30 天完成率{' '}
                     {Math.round(rate * 100)}%
                     {h.note ? ` · ${h.note}` : ''}
@@ -232,7 +257,7 @@ export function HabitsPage() {
 
               <Heatmap values={heatOf(h)} weeks={20} end={today} />
 
-              <div className="row" style={{ gap: 6, marginTop: 12 }}>
+              <div className="row" style={{ gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
                 <button
                   className={`btn btn-sm${done ? '' : ' btn-primary'}`}
                   onClick={() => actions.toggleHabit(h.id, today)}
@@ -247,6 +272,9 @@ export function HabitsPage() {
                   }}
                 >
                   编辑
+                </button>
+                <button className="btn btn-sm" onClick={() => openBackfill(h)}>
+                  补录
                 </button>
                 <button className="btn btn-sm btn-ghost" onClick={() => actions.setHabitArchived(h.id, true)}>
                   暂停
@@ -296,6 +324,52 @@ export function HabitsPage() {
           </section>
         ) : null}
       </div>
+
+      <Sheet
+        open={!!backfill}
+        onClose={() => setBackfill(null)}
+        title="补录打卡"
+        subtitle={backfill ? `${backfill.name} · 补录不计入连续天数` : undefined}
+      >
+        <div className="stack">
+          {backfill && backfill.createdAt >= today ? (
+            <div className="empty">这个习惯今天才建立，还没有可补录的日子。</div>
+          ) : (
+            <>
+              <Field label="补哪一天">
+                <input
+                  className="input"
+                  type="date"
+                  value={backfillDate}
+                  min={backfill?.createdAt}
+                  max={addDays(today, -1)}
+                  onChange={(e) => setBackfillDate(e.target.value || today)}
+                />
+              </Field>
+              <Field label={`完成次数（每天目标 ${backfill?.targetPerDay ?? 1} 次）`}>
+                <div className="stepper">
+                  <button aria-label="减少" onClick={() => setBackfillCount((n) => Math.max(0, n - 1))}>
+                    −
+                  </button>
+                  <span className="habit-count" style={{ minWidth: 48, textAlign: 'center' }}>
+                    {backfillCount}/{backfill?.targetPerDay ?? 1}
+                  </span>
+                  <button
+                    aria-label="增加"
+                    onClick={() => setBackfillCount((n) => Math.min(backfill?.targetPerDay ?? 1, n + 1))}
+                  >
+                    ＋
+                  </button>
+                </div>
+                <div className="card-sub">设成 0 会清掉那天的打卡记录。</div>
+              </Field>
+              <button className="btn btn-primary btn-block" onClick={saveBackfill}>
+                保存补录
+              </button>
+            </>
+          )}
+        </div>
+      </Sheet>
 
       <HabitEditor open={open} habit={editing} onClose={() => setOpen(false)} />
     </>

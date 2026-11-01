@@ -71,6 +71,8 @@ export function ReviewPage() {
   const [krUnit, setKrUnit] = useState('次')
 
   const activeGoals = data.goals.filter((g) => g.status === 'active')
+  const finishedGoals = data.goals.filter((g) => g.status !== 'active')
+  const [showFinished, setShowFinished] = useState(false)
   // 目标卡片的「本周推进」固定按本周算，不随上面浏览的历史周变化
   const thisWeekStart = startOfWeek(today)
 
@@ -426,6 +428,50 @@ export function ReviewPage() {
                 })}
               </div>
             )}
+
+            {finishedGoals.length > 0 ? (
+              <>
+                <hr className="divider" />
+                <div className="row-between">
+                  <div className="eyebrow">已完成 / 已放弃 · {finishedGoals.length}</div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowFinished((v) => !v)}>
+                    {showFinished ? '收起' : '展开'}
+                  </button>
+                </div>
+                {showFinished
+                  ? finishedGoals.map((g) => (
+                      <div className="goal-card" key={g.id} style={{ marginTop: 8 }}>
+                        <div className="row-between" style={{ alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="goal-title" style={{ opacity: 0.72 }}>
+                              {g.title}
+                            </div>
+                            <div className="card-sub">
+                              {g.status === 'done' ? '已完成' : '已放弃'} · {formatShort(g.dueDate)} 截止
+                            </div>
+                          </div>
+                          <div className="row" style={{ gap: 4 }}>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => actions.updateGoal(g.id, { status: 'active' })}
+                            >
+                              恢复
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                if (confirm(`删除目标「${g.title}」？`)) actions.removeGoal(g.id)
+                              }}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  : null}
+              </>
+            ) : null}
           </section>
 
           <section className="card">

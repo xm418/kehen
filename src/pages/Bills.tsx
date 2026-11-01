@@ -36,6 +36,7 @@ export function BillsPage() {
   const [note, setNote] = useState('')
   const [date, setDate] = useState(today)
   const [detail, setDetail] = useState<Expense | null>(null)
+  const [keyword, setKeyword] = useState('')
 
   // 每月初跨月时自动跟进，不然会一直停在旧月份；正在翻历史月份则不动
   const prevCurrent = useRef(currentMonth)
@@ -71,15 +72,24 @@ export function BillsPage() {
     return [...map.entries()].sort((a, b) => b[1] - a[1])
   }, [monthly])
 
+  // 搜索只过滤下面的流水，不影响本月合计
+  const shown = useMemo(() => {
+    const q = keyword.trim().toLowerCase()
+    if (!q) return monthly
+    return monthly.filter(
+      (e) => (e.note ?? '').toLowerCase().includes(q) || e.category.toLowerCase().includes(q),
+    )
+  }, [monthly, keyword])
+
   const grouped = useMemo(() => {
     const map = new Map<string, Expense[]>()
-    for (const e of monthly) {
+    for (const e of shown) {
       const arr = map.get(e.date) ?? []
       arr.push(e)
       map.set(e.date, arr)
     }
     return [...map.entries()]
-  }, [monthly])
+  }, [shown])
 
   const canSubmit = Number(amount) > 0
 
@@ -118,6 +128,15 @@ export function BillsPage() {
         >
           下个月 ›
         </button>
+      </div>
+
+      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+        <input
+          className="input"
+          placeholder="搜索备注或分类"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+        />
       </div>
 
       <div className="metric-row" style={{ marginBottom: 12 }}>
@@ -238,7 +257,9 @@ export function BillsPage() {
 
       {grouped.length === 0 ? (
         <div className="card">
-          <div className="empty">这个月还没有记录。买第一杯咖啡时，顺手记一笔。</div>
+          <div className="empty">
+            {keyword.trim() ? '没有匹配的流水，换个关键词试试。' : '这个月还没有记录。买第一杯咖啡时，顺手记一笔。'}
+          </div>
         </div>
       ) : (
         grouped.map(([day, items]) => {
