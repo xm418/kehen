@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/Icons'
 import { Sheet, Field } from '../components/Sheet'
+import { WordDetailSheet, WordEntries } from '../components/WordDetailSheet'
 import { useStore } from '../state/store'
 import { KAOYAN_WORDS, parseWordLines, type WordSeed } from '../core/wordbank'
 import { speakWord } from '../core/speech'
 import { dictLookup } from '../core/storage/cloudAdapter'
+import { loadWordDetail, readCachedDetail, type WordDetail } from '../core/wordDetail'
 import type { WordItem } from '../core/types'
 
 const AUTO_SPEAK_KEY = 'kedu:wordAutoSpeak'
@@ -52,6 +54,8 @@ export function WordsPage() {
   const [flipped, setFlipped] = useState(false)
   const [autoSpeak, setAutoSpeak] = useState(readAutoSpeak)
   const current: WordItem | undefined = queue.length > 0 ? queue[cursor % queue.length] : undefined
+  /** 卡片背面用的词条详情（词性/词义），翻面时才查 */
+  const [currentDetail, setCurrentDetail] = useState<WordDetail | null>(null)
 
   // 卡片出现时自动发音（不背单词的体验）
   const currentId = current?.id
@@ -59,6 +63,54 @@ export function WordsPage() {
     if (currentId && autoSpeak && current) speakWord(current.word)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId, autoSpeak])
+
+  // 翻面后补全词条详情：先看本机缓存，没有就问服务器
+  const currentWord = current?.word
+  const endpoint = data.settings.sync.endpoint
+  useEffect(() => {
+    if (!flipped || !currentWord) {
+      setCurrentDetail(null)
+      return
+    }
+    const cached = readCachedDetail(currentWord)
+    if (cached) {
+      setCurrentDetail(cached)
+      return
+    }
+    setCurrentDetail(null)
+    let alive = true
+    void loadWordDetail(endpoint, currentWord).then((d) => {
+      if (alive) setCurrentDetail(d)
+    })
+    return () => {
+      alive = false
+    }
+  }, [flipped, currentWord, endpoint])
+
+  /* ---------------------------- 词条详情弹层 ---------------------------- */
+  const [detailFor, setDetailFor] = useState<WordItem | null>(null)
+  const [detailData, setDetailData] = useState<WordDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const detailWordRef = useRef('')
+
+  const openDetail = (w: WordItem) => {
+    detailWordRef.current = w.word
+    setDetailFor(w)
+    const cached = readCachedDetail(w.word)
+    setDetailData(cached)
+    setDetailLoading(!cached)
+    if (cached) return
+    void loadWordDetail(endpoint, w.word).then((d) => {
+      if (detailWordRef.current !== w.word) return
+      setDetailData(d)
+      setDetailLoading(false)
+    })
+  }
+
+  const closeDetail = () => {
+    detailWordRef.current = ''
+    setDetailFor(null)
+  }
 
   const toggleAutoSpeak = () => {
     setAutoSpeak((v) => {
@@ -221,10 +273,25 @@ export function WordsPage() {
               </button>
             </div>
             {flipped ? (
-              <>
-                <div className="word-meaning">{current.meaning || '（还没有释义，导入时可以补）'}</div>
-                {current.example ? <div className="word-example">{current.example}</div> : null}
-              </>
+              currentDetail ? (
+                <>
+                  <div style={{ textAlign: 'left', marginTop: 10 }}>
+                    <WordEntries detail={currentDetail} compact />
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ marginTop: 10 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openDetail(current)
+                    }}
+                  >
+                    完整词条
+                  </button>
+                </>
+              ) : (
+                <div className="word-meaning">{current.meaning || '正在查词典…'}</div>
+              )
             ) : (
               <div className="card-sub" style={{ marginTop: 8 }}>
                 点卡片看释义
@@ -285,7 +352,11 @@ export function WordsPage() {
                     <button className="icon-btn" aria-label={`朗读 ${w.word}`} onClick={() => speakWord(w.word)}>
                       <Icon name="sound" size={16} />
                     </button>
-                    <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{ minWidth: 0, cursor: 'pointer' }}
+                      onClick={() => openDetail(w)}
+                      title="查看词条详情"
+                    >
                       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                         <span className="log-title" style={{ fontSize: 14 }}>{w.word}</span>
                         {w.phonetic ? <span className="word-phonetic">{w.phonetic}</span> : null}
@@ -314,6 +385,18 @@ export function WordsPage() {
             ))}
         </div>
       ) : null}
+
+      {/* 词条详情 */}
+      <WordDetailSheet
+        open={!!detailFor}
+        word={detailFor?.word ?? ''}
+        phonetic={detailFor?.phonetic}
+        detail={detailData}
+        loading={detailLoading}
+        fallbackMeaning={detailFor?.meaning}
+        fallbackExample={detailFor?.example}
+        onClose={closeDetail}
+      />
 
       {/* 导入 Sheet */}
       <Sheet

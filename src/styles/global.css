@@ -1263,6 +1263,88 @@ a {
   font-style: italic;
 }
 
+/* 词条详情：词性 / 词义 / 同义 / 反义 / 例句 */
+.wd {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wd-compact {
+  gap: 8px;
+}
+
+.wd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 14px;
+}
+
+.wd-word {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.wd-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wd-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.wd-label {
+  flex: none;
+  width: 56px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.wd-pos {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.wd-text {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.wd-compact .wd-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.wd-num {
+  margin-right: 3px;
+  color: var(--muted);
+}
+
+.wd-sent {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.wd-sent-zh {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 /* 搜索命中标记 */
 mark.hl {
   background: color-mix(in srgb, var(--ink) 16%, transparent);

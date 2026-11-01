@@ -39,6 +39,9 @@ const PUSH_INTERVAL = 60 * 1000
 
 /** 用户上传的文档：server/files/{userId}/{fileId}，元信息在 db.files */
 const FILES_DIR = path.join(ROOT, 'files')
+/** 词条详情缓存：server/data/words/{word}.json，查过一次就落盘，30 天内不再请求外部词典 */
+const WORDS_DIR = path.join(DATA_DIR, 'words')
+const WORD_CACHE_TTL = 30 * 24 * 60 * 60 * 1000
 
 /** @type {{ users: any[], tokens: any[], docs: Record<string, any>, files: Record<string, any[]> }} */
 let db = { users: [], tokens: [], docs: {}, files: {} }
@@ -703,6 +706,164 @@ async function handleDict(req, res, user) {
   }
 }
 
+/* ---------------------------- 词条详情（词性/词义/同义/反义） ---------------------------- */
+
+/** 「adj. 根本的，彻底的；激进的」→ { pos:'adj.', text:'根本的，彻底的；激进的' } */
+function splitPos(line) {
+  const m = /^([a-zA-Z/]{1,8}\.)\s*(.*)$/.exec(String(line).trim())
+  return m ? { pos: m[1].toLowerCase(), text: m[2] } : { pos: '', text: String(line).trim() }
+}
+
+function stripTag(s) {
+  return String(s ?? '')
+    .replace(/<\/?b>/g, '')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+}
+
+/** 有道 ec.word[].trs → [{ pos, senses[] }]，同一词性的义项合并成一组 */
+function toEntries(trs) {
+  const out = []
+  for (const t of trs || []) {
+    for (const tr of t?.tr || []) {
+      for (const line of tr?.l?.i || []) {
+        if (!line) continue
+        const { pos, text } = splitPos(line)
+        const senses = stripTag(text)
+          .split(/[；;]/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (senses.length === 0) continue
+        const last = out[out.length - 1]
+        if (last && last.pos === pos) last.senses.push(...senses)
+        else out.push({ pos, senses })
+      }
+    }
+  }
+  return out
+}
+
+/** dictionaryapi.dev 用全称，统一成词典里的缩写 */
+const POS_SHORT = {
+  adjective: 'adj.',
+  adverb: 'adv.',
+  noun: 'n.',
+  verb: 'v.',
+  pronoun: 'pron.',
+  preposition: 'prep.',
+  conjunction: 'conj.',
+  interjection: 'int.',
+  numeral: 'num.',
+  article: 'art.',
+}
+
+/** 反义：有道没有这个字段，从 dictionaryapi.dev 拿，失败就留空 */
+async function fetchAntonyms(word) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 4000)
+  try {
+    const r = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      { signal: ctrl.signal, headers: { 'User-Agent': 'kedu-app/1.7' } },
+    )
+    if (!r.ok) return []
+    const json = await r.json()
+    const entry = Array.isArray(json) ? json[0] : null
+    const out = []
+    for (const m of entry?.meanings || []) {
+      const ants = [...(m?.antonyms || [])]
+      for (const d of m?.definitions || []) if (Array.isArray(d?.antonyms)) ants.push(...d.antonyms)
+      const words = [...new Set(ants.map((a) => stripTag(a)).filter(Boolean))]
+      if (words.length > 0) {
+        const pos = String(m?.partOfSpeech || '')
+        out.push({ pos: POS_SHORT[pos] ?? pos, words: words.slice(0, 6) })
+      }
+    }
+    return out
+  } catch {
+    return []
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function fetchWordDetail(word) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000)
+  try {
+    const r = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(word)}`, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (kedu-app)' },
+    })
+    if (!r.ok) return null
+    const j = await r.json()
+    const ecWord = j?.ec?.word?.[0]
+    if (!ecWord) return null
+
+    const entries = toEntries(ecWord.trs)
+    if (entries.length === 0) return null
+
+    const synonyms = (j?.syno?.synos || [])
+      .map((s) => ({
+        pos: String(s?.syno?.pos || '').trim(),
+        words: (s?.syno?.ws || []).map((x) => stripTag(x?.w)).filter(Boolean),
+        tran: stripTag(s?.syno?.tran),
+      }))
+      .filter((s) => s.words.length > 0)
+
+    const sentences = (j?.blng_sents_part?.['sentence-pair'] || [])
+      .slice(0, 4)
+      .map((p) => ({ en: stripTag(p?.sentence), zh: stripTag(p?.['sentence-translation']) }))
+      .filter((s) => s.en)
+
+    const forms = (ecWord.wfs || [])
+      .map((f) => ({ name: stripTag(f?.wf?.name), value: stripTag(f?.wf?.value) }))
+      .filter((f) => f.name && f.value)
+
+    return {
+      word,
+      phonetic: String(ecWord.usphone || ecWord.ukphone || '').trim(),
+      entries,
+      synonyms,
+      antonyms: await fetchAntonyms(word),
+      sentences,
+      forms,
+    }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * GET /api/word?q=xxx —— 词条详情（词性、词义、同义、反义、例句、词形）。
+ * 不需要登录：只查公开词典数据，缓存落盘，查不到回 { ok:false }。
+ */
+async function handleWordDetail(req, res) {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const word = String(url.searchParams.get('q') || '').trim().toLowerCase()
+  if (!/^[a-z][a-z'-]*$/.test(word)) return send(res, 400, { error: '单词格式不正确' })
+
+  const cacheFile = path.join(WORDS_DIR, `${word}.json`)
+  if (existsSync(cacheFile)) {
+    try {
+      const cached = JSON.parse(await readFile(cacheFile, 'utf8'))
+      if (cached?.data && Date.now() - (cached.at || 0) < WORD_CACHE_TTL) {
+        return send(res, 200, { ok: true, cached: true, ...cached.data })
+      }
+    } catch {
+      /* 缓存坏了就重新查 */
+    }
+  }
+
+  const data = await fetchWordDetail(word)
+  if (!data) return send(res, 200, { ok: false })
+  await mkdir(WORDS_DIR, { recursive: true }).catch(() => {})
+  await writeFile(cacheFile, JSON.stringify({ at: Date.now(), data }), 'utf8').catch(() => {})
+  return send(res, 200, { ok: true, ...data })
+}
+
 /** 版本信息：server/app/version.json，改这个文件就能推更新 */
 async function handleVersion(res) {
   const file = path.join(APP_DIR, 'version.json')
@@ -789,6 +950,10 @@ const server = createServer(async (req, res) => {
     const user = currentUser(req)
     if (!user) return send(res, 401, { error: '登录已失效，请重新登录' })
     return handleDict(req, res, user).catch(() => send(res, 200, { ok: false }))
+  }
+
+  if (url.pathname === '/api/word' && req.method === 'GET') {
+    return handleWordDetail(req, res).catch(() => send(res, 200, { ok: false }))
   }
 
   if (url.pathname === '/api/sync') {

@@ -187,6 +187,42 @@ export async function dictLookup(
   }
 }
 
+/** 词条详情：词性、词义、同义、反义、例句、词形 */
+export interface WordDetail {
+  word: string
+  phonetic: string
+  /** 每个词性一组义项，如 [{ pos:'adj.', senses:['根本的，彻底的','激进的'] }] */
+  entries: { pos: string; senses: string[] }[]
+  synonyms: { pos: string; words: string[]; tran: string }[]
+  antonyms: { pos: string; words: string[] }[]
+  sentences: { en: string; zh: string }[]
+  forms: { name: string; value: string }[]
+}
+
+/** 服务端 /api/word 会缓存词典结果，查不到返回 null */
+export async function wordDetailLookup(
+  endpoint: string | undefined,
+  word: string,
+): Promise<WordDetail | null> {
+  try {
+    const res = await request<Partial<WordDetail> & { ok: boolean }>(
+      `${apiBase(endpoint)}/word?q=${encodeURIComponent(word)}`,
+    )
+    if (!res.ok) return null
+    return {
+      word: res.word ?? word,
+      phonetic: res.phonetic ?? '',
+      entries: res.entries ?? [],
+      synonyms: res.synonyms ?? [],
+      antonyms: res.antonyms ?? [],
+      sentences: res.sentences ?? [],
+      forms: res.forms ?? [],
+    }
+  } catch {
+    return null
+  }
+}
+
 /** 下载返回二进制，不能走 request()（它会按 JSON 解析） */
 export async function fileDownload(
   endpoint: string | undefined,
