@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Icon } from './Icons'
 import { Sheet } from './Sheet'
 import { speakWord } from '../core/speech'
@@ -43,6 +44,7 @@ export function WordDetailSheet({
   loading,
   fallbackMeaning,
   fallbackExample,
+  footer,
   onClose,
 }: {
   open: boolean
@@ -52,6 +54,8 @@ export function WordDetailSheet({
   loading: boolean
   fallbackMeaning?: string
   fallbackExample?: string
+  /** 弹层底部操作，比如标熟 / 不认识 */
+  footer?: ReactNode
   onClose: () => void
 }) {
   const ph = detail?.phonetic || phonetic || ''
@@ -141,6 +145,7 @@ export function WordDetailSheet({
           ))}
         </div>
       ) : null}
+      {footer ? <div style={{ marginTop: 16 }}>{footer}</div> : null}
     </Sheet>
   )
 }

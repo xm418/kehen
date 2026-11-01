@@ -1284,6 +1284,35 @@ a {
   font-style: italic;
 }
 
+/* 管理模式下的勾选 */
+.word-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1.4px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--on-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.word-check.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+
+/* 测验选项：左对齐，长释义不挤在中间 */
+.quiz-opt {
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
 /* 词条详情：词性 / 词义 / 同义 / 反义 / 例句 */
 .wd {
   display: flex;

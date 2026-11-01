@@ -129,8 +129,16 @@ export interface StoreActions {
   /** 批量加单词（按 word 去重），返回实际加了多少个 */
   addWords: (items: { word: string; phonetic?: string; meaning?: string; example?: string; group?: string }[]) => number
   removeWord: (id: string) => void
+  removeWords: (ids: string[]) => void
   /** 标记认识/不认识；不认识会顺手累一次复习计数 */
   setWordFamiliar: (id: string, familiar: 0 | 1) => void
+  setWordsFamiliar: (ids: string[], familiar: 0 | 1) => void
+  /** 学一个词：认识就按 1/3/7/15/30 天排下一轮复习，不认识进错词本、今天继续出现 */
+  rateWord: (id: string, known: boolean) => void
+  /** 手动移出 / 放回错词本 */
+  setWordWrong: (id: string, wrong: boolean) => void
+  /** 整组改名，to 留空表示移到未分组 */
+  renameWordGroup: (from: string, to: string) => void
 
   /** 刚导出过备份，记下时间 */
   markBackedUp: () => void
@@ -836,6 +844,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               familiar: 0,
               addedAt: now,
               reviewCount: 0,
+              stage: 0,
             })
             added += 1
           }
@@ -849,18 +858,105 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return d
         })
       },
+      removeWords(ids) {
+        if (ids.length === 0) return
+        const drop = new Set(ids)
+        update((d) => {
+          d.words = d.words.filter((w) => !drop.has(w.id))
+          return d
+        })
+      },
       setWordFamiliar(id, familiar) {
         update((d) => {
           const w = d.words.find((x) => x.id === id)
           if (!w) return d
           w.familiar = familiar
-          if (familiar === 0) w.reviewCount += 1
-          // 每学一个词记一次，跨天自动归零，单词页按这个算今日进度
+          if (familiar === 1) {
+            w.stage = REVIEW_INTERVALS.length
+            w.nextReviewAt = undefined
+          } else {
+            // 重学：从今天重新排队，仍在错词本里
+            w.stage = 0
+            w.reviewCount += 1
+            w.nextReviewAt = todayKey()
+          }
+          return d
+        })
+      },
+      setWordsFamiliar(ids, familiar) {
+        if (ids.length === 0) return
+        const target = new Set(ids)
+        const today = todayKey()
+        update((d) => {
+          for (const w of d.words) {
+            if (!target.has(w.id)) continue
+            w.familiar = familiar
+            if (familiar === 1) {
+              w.stage = REVIEW_INTERVALS.length
+              w.nextReviewAt = undefined
+            } else {
+              w.stage = 0
+              w.reviewCount += 1
+              w.nextReviewAt = today
+            }
+          }
+          return d
+        })
+      },
+      rateWord(id, known) {
+        update((d) => {
+          const w = d.words.find((x) => x.id === id)
+          if (!w) return d
           const today = todayKey()
-          d.wordProgress =
+          const isReview = w.stage > 0
+          if (known) {
+            w.stage = Math.min(w.stage + 1, REVIEW_INTERVALS.length)
+            w.wrong = false
+            if (w.stage >= REVIEW_INTERVALS.length) {
+              w.familiar = 1
+              w.nextReviewAt = undefined
+            } else {
+              w.familiar = 0
+              w.nextReviewAt = addDays(today, REVIEW_INTERVALS[w.stage - 1])
+            }
+          } else {
+            w.familiar = 0
+            w.stage = 0
+            w.reviewCount += 1
+            w.wrong = true
+            w.nextReviewAt = today
+          }
+          w.lastStudiedAt = today
+          const p =
             d.wordProgress && d.wordProgress.date === today
-              ? { ...d.wordProgress, count: d.wordProgress.count + 1 }
-              : { date: today, count: 1 }
+              ? d.wordProgress
+              : { date: today, count: 0, newCount: 0, reviewCount: 0 }
+          p.count += 1
+          if (isReview) p.reviewCount += 1
+          else p.newCount += 1
+          d.wordProgress = p
+          return d
+        })
+      },
+      renameWordGroup(from, to) {
+        const next = to.trim()
+        update((d) => {
+          for (const w of d.words) {
+            if ((w.group ?? '') === from) w.group = next || undefined
+          }
+          return d
+        })
+      },
+      setWordWrong(id, wrong) {
+        update((d) => {
+          const w = d.words.find((x) => x.id === id)
+          if (!w) return d
+          w.wrong = wrong
+          // 手动收进错词本：今天重新过一遍；移出去不再动复习计划
+          if (wrong) {
+            w.familiar = 0
+            w.nextReviewAt = todayKey()
+          }
           return d
         })
       },

@@ -9,6 +9,7 @@ import { AppCarePanel } from '../components/AppCarePanel'
 import { exportToFile } from '../core/storage/localAdapter'
 import { listSnapshots, readSnapshot, takeSnapshot } from '../core/backup'
 import { PLAN_KEEP_DAYS } from '../core/store-model'
+import { readWordVoice, writeWordVoice, type WordVoice } from '../core/speech'
 import type { AppData } from '../core/types'
 
 function csvCell(value: string | number): string {
@@ -28,6 +29,13 @@ export function SettingsPage() {
   const pomodoro = data.settings.pomodoro
   const focus = data.settings.focus
   const wordGoal = data.settings.words.dailyGoal
+  const [voice, setVoice] = useState(readWordVoice)
+
+  const updateVoice = (patch: Partial<WordVoice>) => {
+    const next = { ...voice, ...patch }
+    setVoice(next)
+    writeWordVoice(next)
+  }
 
   const [importError, setImportError] = useState('')
 
@@ -256,6 +264,36 @@ export function SettingsPage() {
               ))}
             </div>
             <div className="card-sub">按能长期坚持的量定，一下定太多反而容易断</div>
+          </Field>
+
+          <Field label="发音">
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {(
+                [
+                  { key: 'us', label: '美音' },
+                  { key: 'uk', label: '英音' },
+                ] as const
+              ).map((a) => (
+                <button
+                  key={a.key}
+                  className={`pill${voice.accent === a.key ? ' active' : ''}`}
+                  onClick={() => updateVoice({ accent: a.key })}
+                >
+                  {a.label}
+                </button>
+              ))}
+              <span style={{ width: 8 }} />
+              {[0.8, 1, 1.2].map((r) => (
+                <button
+                  key={r}
+                  className={`pill${voice.rate === r ? ' active' : ''}`}
+                  onClick={() => updateVoice({ rate: r })}
+                >
+                  {r === 1 ? '正常' : `${r}×`}
+                </button>
+              ))}
+            </div>
+            <div className="card-sub">点单词上的喇叭就按这个口音和语速播</div>
           </Field>
         </div>
       </section>

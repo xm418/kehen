@@ -197,7 +197,12 @@ export interface Settings {
 /** 今天已经学过的单词数，跨天自动归零 */
 export interface WordProgress {
   date: DateKey
+  /** 今天一共学了多少个（新学 + 复习） */
   count: number
+  /** 其中今天第一次见的新词 */
+  newCount: number
+  /** 其中按复习计划回来的词 */
+  reviewCount: number
 }
 
 /** 一笔欠账：某天没做完的份额 */
@@ -311,6 +316,14 @@ export interface WordItem {
   addedAt: Stamp
   /** 「不认识」的次数，越多排越前 */
   reviewCount: number
+  /** 已完成的复习轮次：0 是新词，到 REVIEW_INTERVALS.length 算掌握 */
+  stage: number
+  /** 下次复习日期，空表示今天不用再学 */
+  nextReviewAt?: DateKey
+  /** 最后一次学它的日期 */
+  lastStudiedAt?: DateKey
+  /** 错过（点不认识或测验答错），进错词本 */
+  wrong?: boolean
 }
 
 export interface AppData {

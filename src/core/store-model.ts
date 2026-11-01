@@ -84,7 +84,7 @@ export function createInitialData(): AppData {
     guardLogs: [],
     documents: [],
     words: [],
-    wordProgress: { date: now, count: 0 },
+    wordProgress: { date: now, count: 0, newCount: 0, reviewCount: 0 },
     settings: { ...DEFAULT_SETTINGS },
     timer: {
       running: false,
@@ -116,11 +116,21 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
     expenses: raw.expenses ?? [],
     guardLogs: raw.guardLogs ?? [],
     documents: raw.documents ?? [],
-    words: raw.words ?? [],
+    words: (raw.words ?? []).map((w) => ({
+      ...w,
+      // 旧数据没有复习阶段：已经标熟的直接算掌握，其余按新词排队
+      stage: typeof w.stage === 'number' ? w.stage : w.familiar === 1 ? REVIEW_INTERVALS.length : 0,
+      wrong: !!w.wrong,
+    })),
     wordProgress:
       raw.wordProgress && raw.wordProgress.date === todayKey()
-        ? raw.wordProgress
-        : { date: todayKey(), count: 0 },
+        ? {
+            date: raw.wordProgress.date,
+            count: raw.wordProgress.count ?? 0,
+            newCount: raw.wordProgress.newCount ?? 0,
+            reviewCount: raw.wordProgress.reviewCount ?? 0,
+          }
+        : { date: todayKey(), count: 0, newCount: 0, reviewCount: 0 },
     settings: {
       ...base.settings,
       ...(raw.settings ?? {}),
