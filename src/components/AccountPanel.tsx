@@ -58,8 +58,8 @@ export function AccountPanel() {
     setBusy(true)
     setError('')
     try {
-      if (kind === 'login') await actions.login(email, password)
-      else await actions.register(email, password)
+      if (kind === 'login') await actions.login(email, password, endpoint.trim())
+      else await actions.register(email, password, endpoint.trim())
       setPassword('')
     } catch (err) {
       setError(err instanceof Error ? err.message : '操作失败')

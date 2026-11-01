@@ -533,6 +533,12 @@ async function handleSync(req, res, user) {
     if (!data || typeof data !== 'object' || !Array.isArray(data.habits)) {
       return send(res, 400, { error: '数据格式不正确' })
     }
+    // 老版本客户端不认识 words 字段，整包推送时会把云端词库清空。
+    // 只有「本次推送一个词都没有」时才保留云端已有的词；正常增删（非空）依然生效。
+    if (!Array.isArray(data.words) || data.words.length === 0) {
+      const prevWords = doc.data && Array.isArray(doc.data.words) ? doc.data.words : null
+      if (prevWords && prevWords.length > 0) data.words = prevWords
+    }
     const base = Number(body.baseRevision ?? 0)
     if (doc.revision !== base) {
       return send(res, 409, {

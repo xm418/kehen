@@ -45,6 +45,7 @@ import type {
   StudyLog,
   TimerMode,
   TimerState,
+  WordItem,
 } from '../core/types'
 
 export interface NewHabitInput {
@@ -152,8 +153,8 @@ export interface StoreActions {
   completeRemedial: (id: string) => void
   repayDebt: (debtId: string) => void
 
-  login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, endpoint?: string) => Promise<void>
+  register: (email: string, password: string, endpoint?: string) => Promise<void>
   logout: () => void
   syncNow: () => Promise<void>
 }
@@ -270,6 +271,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           const endpoint = next.settings.sync.endpoint
           const snap = await syncPull(endpoint, account.token)
           revisionCache.set(codeKey(endpoint, account.token), snap.revision)
+          // 云端词库并回本地：老客户端整包推送会把词表推空，重开时兜底不让词丢失
+          if (snap.data && Array.isArray(snap.data.words)) {
+            const have = new Set((next.words || []).map((w) => String(w.word).toLowerCase()))
+            const merged = [...(next.words || [])]
+            for (const w of snap.data.words as WordItem[]) {
+              const k = String(w?.word || '').toLowerCase()
+              if (!k || have.has(k)) continue
+              have.add(k)
+              merged.push(w)
+            }
+            next.words = merged
+          }
           const localChanged = readChangedAt()
           if (snap.data && (!localChanged || (snap.updatedAt ?? '') > localChanged)) {
             if (!alive) return
@@ -988,8 +1001,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         })
       },
 
-      async login(email, password) {
-        const endpoint = dataRef.current.settings.sync.endpoint
+      async login(email, password, endpointOverride) {
+        const endpoint = endpointOverride ?? dataRef.current.settings.sync.endpoint
         setSync({ state: 'syncing', message: '正在登录…' })
         try {
           const res = await authLogin(endpoint, email.trim(), password)
@@ -1002,7 +1015,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }
           const next: AppData = {
             ...base,
-            settings: { ...base.settings, account, sync: { ...base.settings.sync, mode: 'cloud' } },
+            settings: { ...base.settings, account, sync: { ...base.settings.sync, endpoint, mode: 'cloud' } },
           }
           const merged = await bootstrapCloud(endpoint, res.token, next)
           setData({
@@ -1010,7 +1023,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             settings: {
               ...merged.settings,
               account,
-              sync: { ...merged.settings.sync, mode: 'cloud' },
+              // 服务器地址以本机填的为准，不用云端里可能过期的旧地址
+              sync: { ...merged.settings.sync, endpoint, mode: 'cloud' },
             },
           })
         } catch (err) {
@@ -1019,8 +1033,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
       },
 
-      async register(email, password) {
-        const endpoint = dataRef.current.settings.sync.endpoint
+      async register(email, password, endpointOverride) {
+        const endpoint = endpointOverride ?? dataRef.current.settings.sync.endpoint
         setSync({ state: 'syncing', message: '正在注册…' })
         try {
           const res = await authRegister(endpoint, email.trim(), password)
@@ -1033,7 +1047,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }
           const next: AppData = {
             ...base,
-            settings: { ...base.settings, account, sync: { ...base.settings.sync, mode: 'cloud' } },
+            settings: { ...base.settings, account, sync: { ...base.settings.sync, endpoint, mode: 'cloud' } },
           }
           const merged = await bootstrapCloud(endpoint, res.token, next)
           setData({
@@ -1041,7 +1055,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             settings: {
               ...merged.settings,
               account,
-              sync: { ...merged.settings.sync, mode: 'cloud' },
+              // 服务器地址以本机填的为准，不用云端里可能过期的旧地址
+              sync: { ...merged.settings.sync, endpoint, mode: 'cloud' },
             },
           })
         } catch (err) {
