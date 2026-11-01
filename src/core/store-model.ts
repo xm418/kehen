@@ -81,6 +81,7 @@ export function createInitialData(): AppData {
     plans: [],
     expenses: [],
     guardLogs: [],
+    documents: [],
     settings: { ...DEFAULT_SETTINGS },
     timer: {
       running: false,
@@ -111,6 +112,7 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
     plans: prunePlans(raw.plans ?? []),
     expenses: raw.expenses ?? [],
     guardLogs: raw.guardLogs ?? [],
+    documents: raw.documents ?? [],
     settings: {
       ...base.settings,
       ...(raw.settings ?? {}),

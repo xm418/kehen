@@ -114,3 +114,65 @@ export async function syncPush(
     body: JSON.stringify({ data, baseRevision }),
   })
 }
+
+/* ------------------------------ 文档文件 ------------------------------ */
+
+export interface CloudFileMeta {
+  id: string
+  name: string
+  mime: string
+  size: number
+  uploadedAt: string
+}
+
+export async function fileUpload(
+  endpoint: string | undefined,
+  token: string,
+  file: { name: string; mime: string; data: string },
+): Promise<CloudFileMeta> {
+  return request<CloudFileMeta>(`${apiBase(endpoint)}/files`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(file),
+  })
+}
+
+export async function fileList(
+  endpoint: string | undefined,
+  token: string,
+): Promise<CloudFileMeta[]> {
+  const res = await request<{ files: CloudFileMeta[] }>(`${apiBase(endpoint)}/files`, {
+    headers: authHeaders(token),
+  })
+  return res.files ?? []
+}
+
+export async function fileDelete(endpoint: string | undefined, token: string, id: string) {
+  return request<{ ok: boolean }>(`${apiBase(endpoint)}/files/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+/** 下载返回二进制，不能走 request()（它会按 JSON 解析） */
+export async function fileDownload(
+  endpoint: string | undefined,
+  token: string,
+  id: string,
+): Promise<Blob> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 15000)
+  let res: Response
+  try {
+    res = await fetch(`${apiBase(endpoint)}/files/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+    })
+  } catch {
+    throw new Error('连不上服务器，文件没下载下来')
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) throw new Error(res.status === 404 ? '服务器上已经没有这个文件了' : `下载失败（${res.status}）`)
+  return res.blob()
+}

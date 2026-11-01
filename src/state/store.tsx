@@ -10,7 +10,22 @@ import {
 } from 'react'
 import { createLocalAdapter } from '../core/storage/localAdapter'
 import { takeSnapshot } from '../core/backup'
-import { authLogin, authRegister, syncPull, syncPush } from '../core/storage/cloudAdapter'
+import {
+  authLogin,
+  authRegister,
+  fileDelete,
+  fileDownload,
+  fileUpload,
+  syncPull,
+  syncPush,
+} from '../core/storage/cloudAdapter'
+import {
+  blobToBase64,
+  deleteLocalBlob,
+  openDocument,
+  readLocalBlob,
+  saveLocalBlob,
+} from '../core/files'
 import { isHabitCreationLocked, reconcileSupervision } from '../core/supervision'
 import { createInitialData, normalizeData, REVIEW_INTERVALS } from '../core/store-model'
 import { addDays, todayKey } from '../core/date'
@@ -19,6 +34,7 @@ import type {
   AppData,
   DailyReview,
   DateKey,
+  DocumentMeta,
   Expense,
   ExpenseType,
   FocusSession,
@@ -90,6 +106,15 @@ export interface StoreActions {
   updateStudyLog: (id: string, patch: Partial<StudyLog>) => void
   deleteStudyLog: (id: string) => void
   reviewStudyLog: (id: string) => void
+
+  /** 存一份文档（本机 IndexedDB + 云模式下后台传服务器），返回元信息 */
+  addDocument: (input: { name: string; mime: string; blob: Blob }) => Promise<DocumentMeta>
+  /** 删除文档：本机、元信息、服务器一起清 */
+  removeDocument: (id: string) => Promise<void>
+  /** 打开文档：本机没有且服务器有就先下载回来 */
+  openDocumentById: (id: string) => Promise<void>
+  /** 把本机有、服务器没有的文档补传上去（进文档页时跑一次） */
+  uploadPendingDocuments: () => Promise<void>
 
   addExpense: (input: NewExpenseInput) => void
   updateExpense: (id: string, patch: Partial<Expense>) => void
@@ -613,6 +638,100 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }
           return d
         })
+      },
+
+      async addDocument(input) {
+        const meta: DocumentMeta = {
+          id: uid('d'),
+          name: input.name,
+          mime: input.mime,
+          size: input.blob.size,
+          uploadedAt: new Date().toISOString(),
+        }
+        await saveLocalBlob(meta.id, input.blob)
+        update((d) => {
+          d.documents.unshift(meta)
+          return d
+        })
+        // 云模式下后台传一份到服务器，成功就回填 remoteId；失败不挡用户
+        const { account, sync: s } = dataRef.current.settings
+        if (s.mode === 'cloud' && account?.token) {
+          void (async () => {
+            try {
+              const up = await fileUpload(s.endpoint, account.token!, {
+                name: meta.name,
+                mime: meta.mime,
+                data: await blobToBase64(input.blob),
+              })
+              update((d) => {
+                const doc = d.documents.find((x) => x.id === meta.id)
+                if (doc) doc.remoteId = up.id
+                return d
+              })
+            } catch {
+              /* 下次进文档页会补传 */
+            }
+          })()
+        }
+        return meta
+      },
+
+      async removeDocument(id) {
+        const meta = dataRef.current.documents.find((x) => x.id === id)
+        await deleteLocalBlob(id).catch(() => {})
+        update((d) => {
+          d.documents = d.documents.filter((x) => x.id !== id)
+          // 顺手把学习记录上的引用摘掉
+          for (const l of d.studyLogs) {
+            if (l.attachments?.includes(id)) {
+              l.attachments = l.attachments.filter((a) => a !== id)
+            }
+          }
+          return d
+        })
+        const { account, sync: s } = dataRef.current.settings
+        if (meta?.remoteId && s.mode === 'cloud' && account?.token) {
+          fileDelete(s.endpoint, account.token, meta.remoteId).catch(() => {})
+        }
+      },
+
+      async openDocumentById(id) {
+        const meta = dataRef.current.documents.find((x) => x.id === id)
+        if (!meta) throw new Error('文档不存在')
+        let blob = await readLocalBlob(id).catch(() => undefined)
+        if (!blob && meta.remoteId) {
+          const { account, sync: s } = dataRef.current.settings
+          if (s.mode === 'cloud' && account?.token) {
+            blob = await fileDownload(s.endpoint, account.token, meta.remoteId)
+            await saveLocalBlob(id, blob).catch(() => {})
+          }
+        }
+        if (!blob) throw new Error('本机没有这个文件，也没登录云账号下载')
+        await openDocument(meta, blob)
+      },
+
+      async uploadPendingDocuments() {
+        const { account, sync: s } = dataRef.current.settings
+        if (s.mode !== 'cloud' || !account?.token) return
+        for (const doc of dataRef.current.documents) {
+          if (doc.remoteId) continue
+          const blob = await readLocalBlob(doc.id).catch(() => undefined)
+          if (!blob) continue
+          try {
+            const up = await fileUpload(s.endpoint, account.token, {
+              name: doc.name,
+              mime: doc.mime,
+              data: await blobToBase64(blob),
+            })
+            update((d) => {
+              const target = d.documents.find((x) => x.id === doc.id)
+              if (target) target.remoteId = up.id
+              return d
+            })
+          } catch {
+            /* 网络不通就等下次 */
+          }
+        }
       },
 
       addExpense(input) {

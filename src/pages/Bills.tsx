@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
 import { formatShort, weekdayLabel } from '../core/date'
@@ -37,9 +37,11 @@ export function BillsPage() {
   const [date, setDate] = useState(today)
   const [detail, setDetail] = useState<Expense | null>(null)
 
-  // 每月初跨月时自动跟进，不然会一直停在旧月份
+  // 每月初跨月时自动跟进，不然会一直停在旧月份；正在翻历史月份则不动
+  const prevCurrent = useRef(currentMonth)
   useEffect(() => {
-    setMonth((m) => (m > currentMonth ? currentMonth : m))
+    setMonth((m) => (m >= prevCurrent.current || m > currentMonth ? currentMonth : m))
+    prevCurrent.current = currentMonth
   }, [currentMonth])
 
   const cats = type === 'expense' ? EXPENSE_CATS : INCOME_CATS

@@ -91,8 +91,8 @@ export function habitStreak(habit: Habit, logs: HabitLog[], end: DateKey = today
   let longest = 0
   let run = 0
   let walk = habit.createdAt < end ? habit.createdAt : end
-  let start = walk
-  if (diffDays(end, start) > 1000) start = addDays(end, -1000)
+  // 只看最近 1000 天；之前算出的 start 没接到 walk 上，长历史习惯会从创建日白走一遍
+  if (diffDays(end, walk) > 1000) walk = addDays(end, -1000)
   let steps = 0
   while (walk <= end && steps < 1200) {
     if (isHabitScheduled(habit, walk)) {

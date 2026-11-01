@@ -11,7 +11,7 @@
  * 部署到服务器时把整个 server 目录拷过去即可。
  */
 import { createServer } from 'node:http'
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, rename, mkdir, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -31,13 +31,17 @@ const APP_DIR = path.join(ROOT, 'app')
 const DOWNLOAD_DIR = path.join(ROOT, 'public')
 const PORT = Number(process.env.PORT || 8787)
 const TOKEN_DAYS = 30
-const MAX_BODY = 5 * 1024 * 1024
+const MAX_BODY = 20 * 1024 * 1024
+const MAX_FILE = 10 * 1024 * 1024
 /** VAPID 的联系方式，web-push 要求留一个 mailto: 或 https: 地址 */
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:push@kedu.app'
 const PUSH_INTERVAL = 60 * 1000
 
-/** @type {{ users: any[], tokens: any[], docs: Record<string, any> }} */
-let db = { users: [], tokens: [], docs: {} }
+/** 用户上传的文档：server/files/{userId}/{fileId}，元信息在 db.files */
+const FILES_DIR = path.join(ROOT, 'files')
+
+/** @type {{ users: any[], tokens: any[], docs: Record<string, any>, files: Record<string, any[]> }} */
+let db = { users: [], tokens: [], docs: {}, files: {} }
 
 async function load() {
   if (!existsSync(DB_FILE)) return
@@ -47,6 +51,7 @@ async function load() {
       users: Array.isArray(parsed.users) ? parsed.users : [],
       tokens: Array.isArray(parsed.tokens) ? parsed.tokens : [],
       docs: parsed.docs && typeof parsed.docs === 'object' ? parsed.docs : {},
+      files: parsed.files && typeof parsed.files === 'object' ? parsed.files : {},
     }
   } catch (err) {
     console.error('读取数据文件失败，将以空库启动：', err.message)
@@ -574,6 +579,65 @@ async function handleFeedback(req, res) {
   return send(res, 200, { ok: true })
 }
 
+/* ------------------------------ 文档文件接口 ------------------------------ */
+
+function fileMetas(userId) {
+  if (!Array.isArray(db.files[userId])) db.files[userId] = []
+  return db.files[userId]
+}
+
+/** POST /api/files { name, mime, data(base64) } -> meta */
+async function handleFileUpload(req, res, user) {
+  const body = await readBody(req)
+  const name = String(body.name || '').trim().slice(0, 120)
+  const mime = String(body.mime || 'application/octet-stream').slice(0, 120)
+  const raw = String(body.data || '')
+  if (!name) return send(res, 400, { error: '文件名不能为空' })
+  if (!raw) return send(res, 400, { error: '文件内容为空' })
+  const buf = Buffer.from(raw, 'base64')
+  if (buf.length === 0) return send(res, 400, { error: '文件内容为空' })
+  if (buf.length > MAX_FILE) return send(res, 400, { error: '单个文件最大 10MB' })
+
+  const id = randomBytes(8).toString('hex')
+  const dir = path.join(FILES_DIR, user.id)
+  await mkdir(dir, { recursive: true })
+  await writeFile(path.join(dir, id), buf)
+
+  const meta = { id, name, mime, size: buf.length, uploadedAt: nowISO() }
+  fileMetas(user.id).push(meta)
+  await save()
+  return send(res, 200, meta)
+}
+
+/** GET /api/files -> { files: [...meta] } / GET /api/files/{id} -> 二进制 */
+async function handleFileGet(req, res, user, id) {
+  if (!id) return send(res, 200, { files: fileMetas(user.id) })
+  const meta = fileMetas(user.id).find((f) => f.id === id)
+  if (!meta) return send(res, 404, { error: '文件不存在' })
+  const file = path.join(FILES_DIR, user.id, id)
+  if (!existsSync(file)) return send(res, 404, { error: '文件已被清理' })
+  const body = await readFile(file)
+  res.writeHead(200, {
+    'Content-Type': meta.mime,
+    'Content-Length': body.length,
+    'Content-Disposition': `attachment; filename="file"; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.end(body)
+}
+
+/** DELETE /api/files/{id} */
+async function handleFileDelete(res, user, id) {
+  const metas = fileMetas(user.id)
+  const idx = metas.findIndex((f) => f.id === id)
+  if (idx < 0) return send(res, 404, { error: '文件不存在' })
+  metas.splice(idx, 1)
+  await unlink(path.join(FILES_DIR, user.id, id)).catch(() => {})
+  await save()
+  return send(res, 200, { ok: true })
+}
+
 /** 版本信息：server/app/version.json，改这个文件就能推更新 */
 async function handleVersion(res) {
   const file = path.join(APP_DIR, 'version.json')
@@ -636,6 +700,24 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname.startsWith('/download/') && req.method === 'GET') {
     return serveDownload(res, url.pathname).catch(() => send(res, 500, { error: '读取安装包失败' }))
+  }
+
+  if (url.pathname === '/api/files' || url.pathname.startsWith('/api/files/')) {
+    const user = currentUser(req)
+    if (!user) return send(res, 401, { error: '登录已失效，请重新登录' })
+    const id = decodeURIComponent(url.pathname.slice('/api/files/'.length)).replace(/[^0-9a-f]/g, '')
+    if (req.method === 'POST' && url.pathname === '/api/files') {
+      return handleFileUpload(req, res, user).catch((err) => send(res, 400, { error: err.message }))
+    }
+    if (req.method === 'GET') {
+      return handleFileGet(req, res, user, url.pathname === '/api/files' ? '' : id).catch(() =>
+        send(res, 500, { error: '读取文件失败' }),
+      )
+    }
+    if (req.method === 'DELETE' && id) {
+      return handleFileDelete(res, user, id).catch((err) => send(res, 400, { error: err.message }))
+    }
+    return send(res, 405, { error: '不支持的请求方法' })
   }
 
   if (url.pathname === '/api/sync') {

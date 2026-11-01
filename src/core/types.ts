@@ -57,6 +57,8 @@ export interface StudyLog {
   reviewStage: number // 已完成的复习轮次，0 表示尚未开始
   lastReviewedAt?: DateKey
   nextReviewAt?: DateKey // 下次复习日期，为空表示无需复习
+  /** 关联的文档 id 列表（对应 documents 里的 id） */
+  attachments?: string[]
 }
 
 export interface KeyResult {
@@ -269,6 +271,18 @@ export interface TimerState {
   planItemId?: string
 }
 
+/** 一份上传的文档（Word/PDF 等）。内容本体存 IndexedDB / 服务器，这里只存元信息 */
+export interface DocumentMeta {
+  id: string
+  name: string
+  mime: string
+  /** 字节数 */
+  size: number
+  uploadedAt: Stamp
+  /** 服务器上的文件 id，上传成功后回填 */
+  remoteId?: string
+}
+
 export interface AppData {
   version: number
   habits: Habit[]
@@ -284,6 +298,7 @@ export interface AppData {
   plans: DailyPlan[]
   expenses: Expense[]
   guardLogs: GuardLog[]
+  documents: DocumentMeta[]
   settings: Settings
   timer: TimerState
 }

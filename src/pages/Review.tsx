@@ -71,6 +71,8 @@ export function ReviewPage() {
   const [krUnit, setKrUnit] = useState('次')
 
   const activeGoals = data.goals.filter((g) => g.status === 'active')
+  // 目标卡片的「本周推进」固定按本周算，不随上面浏览的历史周变化
+  const thisWeekStart = startOfWeek(today)
 
   const submitGoal = () => {
     if (!gTitle.trim()) return
@@ -334,7 +336,7 @@ export function ReviewPage() {
               <div className="stack">
                 {activeGoals.map((g) => {
                   const ratio = ratioOf(g.krs)
-                  const promoted = planDoneForGoal(data.plans, g.id, weekStart, addDays(weekStart, 6))
+                  const promoted = planDoneForGoal(data.plans, g.id, thisWeekStart, addDays(thisWeekStart, 6))
                   return (
                     <div className="goal-card" key={g.id}>
                       <div className="row-between" style={{ alignItems: 'flex-start' }}>

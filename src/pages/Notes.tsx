@@ -1,8 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
 import { dueReviews } from '../core/stats'
 import { formatShort, diffDays, weekdayLabel, minutesToText } from '../core/date'
+import { ACCEPT_FILE_TYPES, MAX_FILE_SIZE, formatSize, guessMime } from '../core/files'
 import { StudyForm } from '../components/StudyForm'
 import { Sheet } from '../components/Sheet'
 import type { StudyLog } from '../core/types'
@@ -70,6 +71,24 @@ export function NotesPage() {
   }, [filtered])
 
   const detailLive = detail ? data.studyLogs.find((l) => l.id === detail.id) ?? null : null
+
+  const attachInputRef = useRef<HTMLInputElement>(null)
+
+  const attach = async (log: StudyLog, files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    if (file.size > MAX_FILE_SIZE) {
+      alert(`文件超过 ${formatSize(MAX_FILE_SIZE)} 上限，存不下`)
+      return
+    }
+    const meta = await actions.addDocument({
+      name: file.name,
+      mime: guessMime(file.name, file.type),
+      blob: file,
+    })
+    actions.updateStudyLog(log.id, { attachments: [...(log.attachments ?? []), meta.id] })
+    if (attachInputRef.current) attachInputRef.current.value = ''
+  }
 
   return (
     <>
@@ -237,6 +256,48 @@ export function NotesPage() {
                 ))}
               </div>
             ) : null}
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 8 }}>附件</div>
+              {(detailLive.attachments ?? []).length > 0 ? (
+                <div className="stack" style={{ gap: 6, marginBottom: 8 }}>
+                  {(detailLive.attachments ?? []).map((docId) => {
+                    const doc = data.documents.find((d) => d.id === docId)
+                    if (!doc) return null
+                    return (
+                      <div className="row" key={docId} style={{ gap: 8, alignItems: 'center' }}>
+                        <button
+                          className="btn btn-sm"
+                          style={{ flex: 1, textAlign: 'left', justifyContent: 'flex-start' }}
+                          onClick={() => void actions.openDocumentById(doc.id)}
+                        >
+                          {doc.name} · {formatSize(doc.size)}
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          onClick={() =>
+                            actions.updateStudyLog(detailLive.id, {
+                              attachments: (detailLive.attachments ?? []).filter((x) => x !== docId),
+                            })
+                          }
+                        >
+                          移除
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
+              <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+                ＋ 添加附件
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  accept={ACCEPT_FILE_TYPES}
+                  hidden
+                  onChange={(e) => void attach(detailLive, e.target.files)}
+                />
+              </label>
+            </div>
             <hr className="divider" />
             <div className="card-sub">
               {detailLive.nextReviewAt

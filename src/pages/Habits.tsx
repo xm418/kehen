@@ -211,6 +211,8 @@ export function HabitsPage() {
           const streak = habitStreak(h, data.habitLogs, today)
           const rate = rateOf(h)
           const done = isHabitDone(h, data.habitLogs, today)
+          // 「每周几次」的连续单位是周，写死「天」会误导
+          const streakUnit = h.schedule.type === 'weekly' ? '周' : '天'
           return (
             <section className="card" key={h.id}>
               <div className="row-between" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
@@ -220,7 +222,7 @@ export function HabitsPage() {
                     {done ? <span className="tag">今天已完成</span> : null}
                   </div>
                   <div className="card-sub">
-                    连续 {streak.current} 天 · 最长 {streak.longest} 天 · 近 30 天完成率{' '}
+                    连续 {streak.current} {streakUnit} · 最长 {streak.longest} {streakUnit} · 近 30 天完成率{' '}
                     {Math.round(rate * 100)}%
                     {h.note ? ` · ${h.note}` : ''}
                   </div>
