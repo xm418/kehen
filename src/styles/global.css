@@ -1515,14 +1515,14 @@ mark.hl {
 
 
 
-/* ---------- 监督员猫 ---------- */
+/* ---------- 监督员 ---------- */
 .pet-trigger {
   position: fixed;
   right: 14px;
   bottom: calc(84px + env(safe-area-inset-bottom));
   z-index: 35;
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -1530,7 +1530,7 @@ mark.hl {
   display: grid;
   place-items: center;
   cursor: pointer;
-  padding: 0;
+  overflow: visible;    /* 让四肢不被圆形裁掉 */
   transition: transform 0.18s ease;
 }
 
