@@ -4,6 +4,7 @@ import { useTimerSeconds, useTodayKey } from '../hooks/useClock'
 import { focusByDay, focusMinutesOn, isCleanSession, sessionDate } from '../core/stats'
 import { addDays, formatShort, timeToText, weekdayLabel, minutesToText } from '../core/date'
 import { SparkBars, BarList } from '../components/Charts'
+import { FocusSupervisor } from '../components/SupervisorPet'
 import type { FocusSession, TimerMode } from '../core/types'
 
 export function FocusPage() {
@@ -227,6 +228,8 @@ export function FocusPage() {
             这一段已经中断 {timer.interruptions} 次，回来接着做也算数
           </div>
         ) : null}
+
+        <FocusSupervisor />
       </section>
 
       <div className="grid-2" style={{ marginTop: 12 }}>

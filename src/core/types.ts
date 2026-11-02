@@ -134,6 +134,8 @@ export interface SupervisionConfig {
   /** 连续断签达到阈值后锁住新增习惯 */
   lock: boolean
   lockAfterMiss: number
+  /** 监督员信任度（0-100），破戒掉、全勤涨 */
+  petTrust?: number
 }
 
 /** 专注期间的防干扰设置 */

@@ -41,8 +41,8 @@ export async function applyDailyReminder(hour: number): Promise<void> {
       notifications: [
         {
           id: REMINDER_ID,
-          title: '刻痕 · 今天还没做完',
-          body: `已经 ${hour}:00 了，还有习惯没打卡。现在补一下，别让它断。`,
+          title: '刻刻 · 今天的习惯还没做完 😺',
+          body: `已经 ${hour}:00 了，我看着呢。别让它断。`,
           channelId: CHANNEL_ID,
           schedule: { on: { hour, minute: 0 }, repeats: true, allowWhileIdle: true },
         },
@@ -123,8 +123,8 @@ export async function notifyGuardHit(appName: string, label: string): Promise<vo
       notifications: [
         {
           id: 9001,
-          title: '刻痕 · 这段专注破戒了',
-          body: `刚刚在${label}（${appName}），已经记一笔。关掉它，回到正在做的事。`,
+          title: '刻刻 · 破戒了 😤',
+          body: `刚刚在${label}（${appName}），我看到了。关掉它，回来。`,
           channelId: CHANNEL_ID,
         },
       ],

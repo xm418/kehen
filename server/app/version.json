@@ -1,7 +1,7 @@
 {
-  "version": "1.12.6",
-  "versionCode": 26,
-  "notes": "修复 Filesystem.writeFile 参数错误：需要 base64 字符串，文本直接传会报 invalid。",
+  "version": "1.12.7",
+  "versionCode": 27,
+  "notes": "新增监督员猫「刻刻」：全局角落常驻 emoji 挂件 + 专注页大号监督员。三态表情😺🧐😤🥳，点一下弹当日评价（今天专注分钟/习惯完成率/连签天数/破戒次数）。破戒会扣好感度，全勤涨好感。系统通知文案改成刻刻语气。",
   "url": "/download/kehen-1.3.apk",
   "releasedAt": "2026-11-02"
 }

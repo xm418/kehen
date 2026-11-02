@@ -11,6 +11,7 @@ import { BillsPage } from './pages/Bills'
 import { ReviewPage } from './pages/Review'
 import { SettingsPage } from './pages/Settings'
 import { SupervisionGate } from './components/SupervisionGate'
+import { SupervisorPet } from './components/SupervisorPet'
 import { FocusNoteSheet } from './components/FocusNoteSheet'
 import { PlanGate } from './components/PlanGate'
 import { useWakeLock } from './hooks/useWakeLock'
@@ -259,6 +260,7 @@ export default function App() {
 
       <SupervisionGate />
       <PlanGate />
+      <SupervisorPet />
 
       {focusPrompt ? <FocusNoteSheet session={focusPrompt} /> : null}
     </div>
