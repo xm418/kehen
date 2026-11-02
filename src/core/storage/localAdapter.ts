@@ -51,9 +51,11 @@ export async function exportToFile(content: string, filename: string, type = 'ap
     const { FileViewer } = await import('@capacitor/file-viewer')
     const safeName = filename.replace(/[\\/:*?"<>|]/g, '_')
     const rel = `exports/${safeName}`
+    // Filesystem.writeFile 只接受 base64 字符串
+    const b64 = btoa(unescape(encodeURIComponent(content)))
     await Filesystem.writeFile({
       path: rel,
-      data: content,
+      data: b64,
       directory: Directory.Cache,
       recursive: true,
     })

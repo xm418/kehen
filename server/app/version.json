@@ -1,7 +1,7 @@
 {
-  "version": "1.12.5",
-  "versionCode": 25,
-  "notes": "修复安装包里「下载日历提醒」点了没反应：安卓 WebView 不支持 <a download>，现在改成写到缓存目录再交给系统日历打开。备份/CSV 导出也一并修好了。",
+  "version": "1.12.6",
+  "versionCode": 26,
+  "notes": "修复 Filesystem.writeFile 参数错误：需要 base64 字符串，文本直接传会报 invalid。",
   "url": "/download/kehen-1.3.apk",
   "releasedAt": "2026-11-02"
 }
