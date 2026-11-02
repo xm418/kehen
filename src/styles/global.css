@@ -1651,3 +1651,48 @@ mark.hl {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* ====== 熊猫刻刻四 mood 滤镜（emoji 皮肤统一 🐼，用 CSS 表达情绪） ====== */
+.pet-mood-idle {
+  /* 默认：正常显示 */
+}
+.pet-mood-focus {
+  filter: saturate(0.55) brightness(1.06);
+}
+.pet-mood-mad {
+  filter: saturate(1.5) drop-shadow(0 0 6px rgba(220, 50, 50, 0.55));
+  animation: pet-shake 0.45s ease-in-out infinite;
+}
+.pet-mood-celebrate {
+  filter: saturate(1.8) drop-shadow(0 0 8px rgba(255, 200, 0, 0.7));
+  animation: pet-bounce 0.6s ease-in-out infinite;
+}
+
+@keyframes pet-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  25%      { transform: translateX(-2px) rotate(-3deg); }
+  50%      { transform: translateX(0) rotate(0deg); }
+  75%      { transform: translateX(2px) rotate(3deg); }
+}
+
+@keyframes pet-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+
+/* ====== 破戒强制拦截层里的刻刻脸 ====== */
+.gate-pet {
+  text-align: center;
+  margin-bottom: 12px;
+}
+.gate-pet-emoji {
+  font-size: 64px;
+  line-height: 1;
+  display: inline-block;
+}
+.gate-pet-line {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 6px;
+  letter-spacing: 0.02em;
+}

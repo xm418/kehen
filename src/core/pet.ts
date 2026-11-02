@@ -1,4 +1,4 @@
-/** 监督员猫 "刻刻" —— 三态状态机 + 文案池 + 每日评价生成 */
+/** 监督员熊猫 "刻刻" —— 三态状态机 + 文案池 + 每日评价生成 */
 
 export type PetMood = 'idle' | 'focus' | 'mad' | 'celebrate'
 
@@ -18,11 +18,26 @@ export interface PetSnapshot {
   streak: number
 }
 
+/**
+ * 皮肤：默认熊猫 🐼。mood 不同时用不同 CSS 效果表达情绪：
+ *   idle      → 正常
+ *   focus     → 放大 + 蓝色滤镜（认真脸）
+ *   mad       → 红色滤镜 + 抖动
+ *   celebrate → 金色光晕 + 弹跳
+ * 调用方负责按 mood 套 CSS class，这里只给基础表情。
+ */
 export const PET_EMOJI: Record<PetMood, string> = {
-  idle: '😺',
-  focus: '🧐',
-  mad: '😤',
-  celebrate: '🥳',
+  idle: '🐼',
+  focus: '🐼',
+  mad: '🐼',
+  celebrate: '🐼',
+}
+
+export const PET_CLASS: Record<PetMood, string> = {
+  idle: 'pet-mood-idle',
+  focus: 'pet-mood-focus',
+  mad: 'pet-mood-mad',
+  celebrate: 'pet-mood-celebrate',
 }
 
 /** 日常随机台词（点一下弹一条） */
