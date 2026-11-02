@@ -16,6 +16,7 @@ import { PlanGate } from './components/PlanGate'
 import { useWakeLock } from './hooks/useWakeLock'
 import { applyBackupReminder, applyDailyReminder, notifyGuardHit } from './core/nativeNotify'
 import { GUARD_LABEL, guardApp, readForeground } from './core/guard'
+import { applySystemBars } from './core/systemBars'
 
 type TabKey = 'today' | 'habits' | 'focus' | 'notes' | 'words' | 'bills' | 'review' | 'settings'
 
@@ -95,7 +96,9 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = data.settings.theme
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', data.settings.theme === 'dark' ? '#0b0b0b' : '#f6f6f4')
+    if (meta) meta.setAttribute('content', data.settings.theme === 'dark' ? '#0a0a0a' : '#f6f6f4')
+    // APK 里系统状态栏/手势条不在网页控制范围，要单独通知原生
+    void applySystemBars(data.settings.theme === 'dark')
   }, [data.settings.theme])
 
   // 装成 APK 时：按截止时间排一条每天重复的本地通知（网页端自动跳过）

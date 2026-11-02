@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(GuardWatchPlugin.class);
         registerPlugin(AppUpdaterPlugin.class);
+        registerPlugin(SystemBarsPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Android 15+ 强制全面屏，WebView 会被状态栏/手势条压住；把内容区压回安全区
