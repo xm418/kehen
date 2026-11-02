@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
 import { isPastDeadline, notifyOnce, todaysOpenHabits, unexcusedHabits } from '../core/supervision'
-import { PET_EMOJI, PET_CLASS } from '../core/pet'
+import { PandaSVG } from './PandaSVG'
 import { Icon } from './Icons'
 
 /**
@@ -48,7 +48,7 @@ export function SupervisionGate() {
     <div className="gate-backdrop" role="dialog" aria-modal="true">
       <div className="gate">
         <div className="gate-pet">
-          <div className={`gate-pet-emoji ${PET_CLASS.mad}`}>{PET_EMOJI.mad}</div>
+          <PandaSVG mood="mad" size={96} className="gate-pet-svg" />
           <div className="gate-pet-line">我盯着你呢。现在做完还来得及。</div>
         </div>
 

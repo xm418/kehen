@@ -1542,16 +1542,10 @@ mark.hl {
   transform: scale(0.94);
 }
 
-.pet-emoji {
-  font-size: 26px;
-  line-height: 1;
-  animation: pet-bob 2.8s ease-in-out infinite;
-  display: inline-block;
-}
-
-@keyframes pet-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+.pet-svg {
+  display: block;
+  width: 44px;
+  height: 44px;
 }
 
 .pet-bubble {
@@ -1620,6 +1614,22 @@ mark.hl {
   flex-wrap: wrap;
 }
 
+@keyframes pet-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.pet-bubble-svg {
+  width: 32px;
+  height: 32px;
+}
+
+.focus-pet-svg {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
 /* 专注模式里的大号监督员 */
 .focus-pet {
   margin-top: 14px;
@@ -1630,12 +1640,6 @@ mark.hl {
   align-items: center;
   gap: 12px;
   animation: pet-pop 0.2s ease-out;
-}
-
-.focus-pet-emoji {
-  font-size: 42px;
-  line-height: 1;
-  animation: pet-bob 2.2s ease-in-out infinite;
 }
 
 .focus-pet-line {
@@ -1652,43 +1656,145 @@ mark.hl {
   color: var(--muted);
 }
 
-/* ====== 熊猫刻刻四 mood 滤镜（emoji 皮肤统一 🐼，用 CSS 表达情绪） ====== */
-.pet-mood-idle {
-  /* 默认：正常显示 */
-}
-.pet-mood-focus {
-  filter: saturate(0.55) brightness(1.06);
-}
-.pet-mood-mad {
-  filter: saturate(1.5) drop-shadow(0 0 6px rgba(220, 50, 50, 0.55));
-  animation: pet-shake 0.45s ease-in-out infinite;
-}
-.pet-mood-celebrate {
-  filter: saturate(1.8) drop-shadow(0 0 8px rgba(255, 200, 0, 0.7));
-  animation: pet-bounce 0.6s ease-in-out infinite;
+/* ============ 刻刻 Panda SVG 动画 ============ */
+.panda-svg {
+  display: block;
+  overflow: visible;
+  pointer-events: none;
 }
 
-@keyframes pet-shake {
-  0%, 100% { transform: translateX(0) rotate(0deg); }
-  25%      { transform: translateX(-2px) rotate(-3deg); }
-  50%      { transform: translateX(0) rotate(0deg); }
-  75%      { transform: translateX(2px) rotate(3deg); }
+/* —— 通用：呼吸（所有 mood 都有，被 mad/celebrate 覆盖）—— */
+.pd-wrapper {
+  transform-origin: 50% 75%;
+  animation: pd-breathe 3.2s ease-in-out infinite;
 }
 
-@keyframes pet-bounce {
+@keyframes pd-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(0.97, 1.02); }
+}
+
+/* —— idle：眨眼 + 偶尔歪头 —— */
+.panda-idle .pd-wrapper {
+  animation: pd-breathe 3.2s ease-in-out infinite, pd-tilt 6s ease-in-out infinite;
+}
+.panda-idle .pd-eye {
+  animation: pd-blink 4.5s ease-in-out infinite;
+}
+
+@keyframes pd-tilt {
+  0%, 92%, 100% { transform: rotate(0deg); }
+  95%           { transform: rotate(-4deg); }
+  98%           { transform: rotate(0deg); }
+}
+
+@keyframes pd-blink {
+  0%, 42%, 46%, 100% { transform: scaleY(1); }
+  44%                { transform: scaleY(0.1); }
+}
+
+/* —— focus：身体前倾 + 耳朵动 + 眉毛下降 —— */
+.panda-focus .pd-wrapper {
+  animation: pd-breathe 3s ease-in-out infinite;
+  transform: rotate(-2deg) scale(1);
+}
+.panda-focus .pd-body-group {
+  transform: translateY(2px);
+}
+.panda-focus .pd-brow-l {
+  transform: translateY(3px) rotate(-4deg);
+}
+.panda-focus .pd-brow-r {
+  transform: translateY(3px) rotate(4deg);
+}
+.panda-focus .pd-mouth {
+  animation: pd-straighten 2.4s ease-in-out infinite;
+}
+
+@keyframes pd-straighten {
   0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-5px); }
+  50%      { transform: translateY(-1px); }
 }
 
-/* ====== 破戒强制拦截层里的刻刻脸 ====== */
+/* —— mad：整体抖动 + 眉毛下压 + 腮红变红 + 嘴巴变扁 —— */
+.panda-mad .pd-wrapper {
+  animation: pd-mad-shake 0.35s ease-in-out infinite;
+}
+.panda-mad .pd-brow-l {
+  transform: translateY(5px) rotate(-8deg);
+  stroke: #c00;
+  stroke-width: 2.8;
+}
+.panda-mad .pd-brow-r {
+  transform: translateY(5px) rotate(8deg);
+  stroke: #c00;
+  stroke-width: 2.8;
+}
+.panda-mad .pd-cheek-l,
+.panda-mad .pd-cheek-r {
+  fill: #ff6666;
+  opacity: 0.9;
+}
+.panda-mad .pd-mouth {
+  stroke: #c00;
+  stroke-width: 2.2;
+  animation: pd-mad-mouth 0.35s ease-in-out infinite;
+}
+.panda-mad .pd-eye {
+  fill: #fff;
+}
+
+@keyframes pd-mad-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  20%      { transform: translate(-2px, 0) rotate(-2deg); }
+  40%      { transform: translate(2px, 1px) rotate(2deg); }
+  60%      { transform: translate(-1px, 0) rotate(-1deg); }
+  80%      { transform: translate(2px, 0) rotate(1deg); }
+}
+
+@keyframes pd-mad-mouth {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(0.7); }
+}
+
+/* —— celebrate：整体弹跳 + 星星浮现 + 腮红变粉 —— */
+.panda-celebrate .pd-wrapper {
+  animation: pd-celebrate-bounce 0.7s ease-in-out infinite;
+}
+.panda-celebrate .pd-cheek-l,
+.panda-celebrate .pd-cheek-r {
+  fill: #ff99cc;
+  opacity: 0.85;
+}
+.panda-celebrate .pd-star {
+  animation: pd-star-pop 0.7s ease-in-out infinite;
+  opacity: 0;
+  transform-origin: center;
+}
+.panda-celebrate .pd-star-1 { animation-delay: 0s; }
+.panda-celebrate .pd-star-2 { animation-delay: 0.15s; }
+.panda-celebrate .pd-star-3 { animation-delay: 0.3s; }
+
+@keyframes pd-celebrate-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-8px) scale(1.04); }
+}
+
+@keyframes pd-star-pop {
+  0%   { opacity: 0; transform: scale(0) rotate(0deg); }
+  50%  { opacity: 1; transform: scale(1.1) rotate(180deg); }
+  100% { opacity: 0; transform: scale(0) rotate(360deg); }
+}
+
+/* —— 拦截层里的刻刻 —— */
 .gate-pet {
   text-align: center;
   margin-bottom: 12px;
 }
-.gate-pet-emoji {
-  font-size: 64px;
-  line-height: 1;
-  display: inline-block;
+.gate-pet-svg {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
 }
 .gate-pet-line {
   font-size: 13px;

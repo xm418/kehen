@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
 import { lastNDays } from '../core/date'
-import { derivePetMood, petSays, PET_EMOJI, PET_CLASS, adjustTrust, type PetSnapshot } from '../core/pet'
+import { derivePetMood, petSays, adjustTrust, type PetSnapshot } from '../core/pet'
+import { PandaSVG } from './PandaSVG'
 
 function buildSnapshot(today: string, data: ReturnType<typeof useStore>['data'], guardJustNow: boolean): PetSnapshot {
   const days = lastNDays(14, today)
@@ -76,13 +77,13 @@ export function SupervisorPet() {
         aria-label="监督员"
         title="刻刻"
       >
-        <span className={`pet-emoji ${PET_CLASS[snap.mood]}`}>{PET_EMOJI[snap.mood]}</span>
+        <PandaSVG mood={snap.mood} size={48} className="pet-svg" />
       </button>
 
       {open ? (
         <div className="pet-bubble" onClick={() => setOpen(false)}>
           <div className="pet-bubble-head">
-            <span className={PET_CLASS[snap.mood]} style={{ fontSize: 22 }}>{PET_EMOJI[snap.mood]}</span>
+            <PandaSVG mood={snap.mood} size={32} className="pet-bubble-svg" />
             <span className="pet-name">刻刻</span>
             <span className="pet-trust">信任 {snap.trust}</span>
           </div>
@@ -126,7 +127,7 @@ export function FocusSupervisor() {
 
   return (
     <div className="focus-pet">
-      <div className={`focus-pet-emoji ${PET_CLASS[mood]}`}>{PET_EMOJI[mood]}</div>
+      <PandaSVG mood={mood} size={80} className="focus-pet-svg" />
       <div className="focus-pet-line" onClick={() => setLine(petSays({ ...snap, mood }))}>
         {line}
       </div>
