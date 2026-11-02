@@ -1,9 +1,196 @@
 /**
- * 刻刻 —— 手绘 SVG 熊猫。
- * 四种 mood 共用同一个 SVG，差异由 CSS class 驱动（动画 / 表情变形 / 滤镜）。
- * 零依赖：纯 SVG + 纯 CSS keyframes。
+ * 刻刻（像素版）—— 24×24 像素网格渲染的手绘熊猫。
+ * 调色板:
+ *   . 透明   K 黑毛(#1a1a1a)   W 白底(#fff)   D 深灰(#2a2a2a)
+ *   R 红眼(#c00)   G 金星(#ffd700)   P 粉腮红(#ffb3b3)
+ *
+ * mood 差异 = 基础帧 + 表情叠层（眉毛、腮红、眼睛位置）。
  */
 import type { PetMood } from '../core/pet'
+
+const SIZE = 24 // 24×24 网格
+const PX = 1    // 每格 1 unit，viewBox 里再放大
+
+type Cell = '.' | 'K' | 'W' | 'D' | 'R' | 'G' | 'P'
+
+const BASE: string[] = [
+  // 0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20 21 22 23
+  '........................', // 0
+  '........................', // 1
+  '....KK......KK..........', // 2  耳朵顶
+  '...KKKK....KKKK.........', // 3
+  '..KKKKKKKKKKKKKK........', // 4  耳朵下 + 头顶黑
+  '.KKKKWWWWWWWWWWKKK......', // 5  头顶过渡
+  '..KWWWWWWWWWWWWWWWK.....', // 6  脸部上沿
+  '..KWWKKKKWWWWKKKKWWK....', // 7  黑眼圈出现
+  '..KWKKKKKKWWKKKKKKWK....', // 8  黑眼圈完整
+  '..KWKKKKKKWWKKKKKKWK....', // 9
+  '..KWKKWKKKWWKKKWKKWK....', // 10 眼睛在黑眼圈内
+  '..KWKKKKKKWWKKKKKKWK....', // 11
+  '..KWWKKKKWWWWKKKKWWK....', // 12
+  '..KWWWWWWWKWWWWWWWK.....', // 13
+  '..KWWWWWKKKKKWWWWWK.....', // 14
+  '..KKWWWWWWWWWKKKKK......', // 15  脖子黑过渡
+  '...KKWWWWWWWKKK.........', // 16
+  '....KKKKKKKKK...........', // 17  身体黑开始
+  '....KWWWWWWWK...........', // 18  肚皮白
+  '....KWWWWWWWK...........', // 19
+  '....KWWWWWWWK...........', // 20
+  '....KKKKKKKKK...........', // 21  身体底
+  '........................', // 22
+  '........................', // 23
+]
+
+// —— 嘴巴区域覆盖（鼻孔 + 嘴）
+const MOUTH: Record<number, Record<number, Cell>> = {
+  13: { 11: 'D', 12: 'D' },              // 鼻孔
+  14: { 10: 'D', 11: 'D', 12: 'D', 13: 'D' }, // 上唇
+  15: { 11: 'D', 12: 'D' },              // 唇中央
+}
+
+// —— 眼睛：idle 正常眼珠位置
+const EYE_IDLE: Record<number, Record<number, Cell>> = {
+  10: { 9: 'W', 10: 'W', 13: 'W', 14: 'W' }, // 白眼
+  11: { 9: 'W', 10: 'W', 13: 'W', 14: 'W' },
+}
+
+// —— 腮红（idle/focus）
+const CHEEK_SOFT: Record<number, Record<number, Cell>> = {
+  12: { 6: 'P', 7: 'P', 16: 'P', 17: 'P' },
+  13: { 6: 'P', 7: 'P', 16: 'P', 17: 'P' },
+}
+
+// —— 腮红（mad 变红）
+const CHEEK_HOT: Record<number, Record<number, Cell>> = {
+  12: { 6: 'R', 7: 'R', 16: 'R', 17: 'R' },
+  13: { 6: 'R', 7: 'R', 16: 'R', 17: 'R' },
+}
+
+// —— 眉毛（mad 下压变红）
+const BROW_MAD: Record<number, Record<number, Cell>> = {
+  6: { 8: 'R', 9: 'R', 14: 'R', 15: 'R' },
+  7: { 7: 'R', 16: 'R' },
+}
+
+// —— 眉毛（focus 平直）
+const BROW_FOCUS: Record<number, Record<number, Cell>> = {
+  6: { 8: 'D', 9: 'D', 14: 'D', 15: 'D' },
+}
+
+// —— 庆祝星星（三帧闪烁）
+const STARS: Record<number, Record<number, Cell>> = {
+  1: { 5: 'G', 18: 'G' },
+  2: { 11: 'G', 12: 'G' },
+}
+
+const PALETTE: Record<string, string> = {
+  K: '#1a1a1a',
+  W: '#ffffff',
+  D: '#2a2a2a',
+  R: '#c00000',
+  G: '#ffd700',
+  P: '#ffb3b3',
+}
+
+function buildGrid(mood: PetMood, frame: number): string[][] {
+  const grid: string[][] = BASE.map((row) => row.split(''))
+
+  // 覆盖嘴巴
+  for (const [r, cols] of Object.entries(MOUTH)) {
+    const row = parseInt(r, 10)
+    for (const [c, v] of Object.entries(cols)) {
+      grid[row][parseInt(c, 10)] = v
+    }
+  }
+
+  // 覆盖眼睛
+  for (const [r, cols] of Object.entries(EYE_IDLE)) {
+    const row = parseInt(r, 10)
+    for (const [c, v] of Object.entries(cols)) {
+      grid[row][parseInt(c, 10)] = v
+    }
+  }
+
+  if (mood === 'idle' || mood === 'focus') {
+    for (const [r, cols] of Object.entries(CHEEK_SOFT)) {
+      const row = parseInt(r, 10)
+      for (const [c, v] of Object.entries(cols)) {
+        grid[row][parseInt(c, 10)] = v
+      }
+    }
+  }
+
+  if (mood === 'mad') {
+    for (const [r, cols] of Object.entries(CHEEK_HOT)) {
+      const row = parseInt(r, 10)
+      for (const [c, v] of Object.entries(cols)) {
+        grid[row][parseInt(c, 10)] = v
+      }
+    }
+    for (const [r, cols] of Object.entries(BROW_MAD)) {
+      const row = parseInt(r, 10)
+      for (const [c, v] of Object.entries(cols)) {
+        grid[row][parseInt(c, 10)] = v
+      }
+    }
+    // 眼睛变细（怒目）
+    grid[10][9] = 'D'; grid[10][10] = 'D'
+    grid[10][13] = 'D'; grid[10][14] = 'D'
+    grid[11][9] = 'K'; grid[11][10] = 'K'
+    grid[11][13] = 'K'; grid[11][14] = 'K'
+  }
+
+  if (mood === 'focus') {
+    for (const [r, cols] of Object.entries(BROW_FOCUS)) {
+      const row = parseInt(r, 10)
+      for (const [c, v] of Object.entries(cols)) {
+        grid[row][parseInt(c, 10)] = v
+      }
+    }
+  }
+
+  if (mood === 'celebrate') {
+    for (const [r, cols] of Object.entries(CHEEK_SOFT)) {
+      const row = parseInt(r, 10)
+      for (const [c, v] of Object.entries(cols)) {
+        grid[row][parseInt(c, 10)] = v === 'P' ? 'G' : v
+      }
+    }
+    // 星星两帧闪烁
+    const starFrame = frame % 2
+    if (starFrame === 0) {
+      for (const [r, cols] of Object.entries(STARS)) {
+        const row = parseInt(r, 10)
+        for (const [c, v] of Object.entries(cols)) {
+          grid[row][parseInt(c, 10)] = v
+        }
+      }
+    }
+  }
+
+  return grid
+}
+
+function renderRects(grid: string[][], offset = 0) {
+  const rects: React.ReactElement[] = []
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      const cell = grid[r][c]
+      if (cell === '.' || !PALETTE[cell]) continue
+      rects.push(
+        <rect
+          key={`${r}-${c}-${offset}`}
+          x={c + offset}
+          y={r}
+          width={PX}
+          height={PX}
+          fill={PALETTE[cell]}
+        />,
+      )
+    }
+  }
+  return rects
+}
 
 interface Props {
   mood: PetMood
@@ -11,76 +198,25 @@ interface Props {
   className?: string
 }
 
+/**
+ * 像素熊猫刻刻。24×24 网格，shape-rendering=crispEdges 保证硬边。
+ * 动画全由外层 CSS keyframes 驱动（.px-wrapper transform），
+ * 内部只负责把 mood 帧渲染成 rect 元素。
+ */
 export function PandaSVG({ mood, size = 48, className = '' }: Props) {
+  const grid = buildGrid(mood, 0)
+
   return (
     <svg
-      className={`panda-svg panda-${mood} ${className}`}
+      className={`panda-px panda-px-${mood} ${className}`}
       width={size}
       height={size}
-      viewBox="0 0 100 100"
+      viewBox={`0 0 ${SIZE} ${SIZE}`}
+      shapeRendering="crispEdges"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <g className="pd-wrapper">
-        {/* 耳朵 */}
-        <g className="pd-ears">
-          <circle className="pd-ear pd-ear-l" cx="22" cy="22" r="11" fill="#1a1a1a" />
-          <circle className="pd-ear pd-ear-r" cx="78" cy="22" r="11" fill="#1a1a1a" />
-        </g>
-
-        {/* 身体 */}
-        <g className="pd-body-group">
-          <ellipse className="pd-body" cx="50" cy="80" rx="28" ry="17" fill="#1a1a1a" />
-          <ellipse className="pd-belly" cx="50" cy="82" rx="18" ry="11" fill="#ffffff" />
-        </g>
-
-        {/* 头 */}
-        <g className="pd-head">
-          <circle className="pd-head-fill" cx="50" cy="46" r="30" fill="#ffffff" stroke="#1a1a1a" strokeWidth="1.2" />
-
-          {/* 黑眼圈 */}
-          <g className="pd-eye-patches">
-            <ellipse className="pd-patch pd-patch-l" cx="36" cy="45" rx="8" ry="10" fill="#1a1a1a" transform="rotate(-18 36 45)" />
-            <ellipse className="pd-patch pd-patch-r" cx="64" cy="45" rx="8" ry="10" fill="#1a1a1a" transform="rotate(18 64 45)" />
-          </g>
-
-          {/* 眉毛（mad 时下降） */}
-          <g className="pd-brows">
-            <path className="pd-brow pd-brow-l" d="M28 36 Q36 32 44 37" stroke="#1a1a1a" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-            <path className="pd-brow pd-brow-r" d="M56 37 Q64 32 72 36" stroke="#1a1a1a" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-          </g>
-
-          {/* 眼睛 */}
-          <g className="pd-eyes">
-            <circle className="pd-eye pd-eye-l" cx="37" cy="46" r="3.2" fill="#ffffff" />
-            <circle className="pd-eye pd-eye-r" cx="63" cy="46" r="3.2" fill="#ffffff" />
-          </g>
-
-          {/* 鼻子 */}
-          <ellipse className="pd-nose" cx="50" cy="56" rx="3.5" ry="2.5" fill="#1a1a1a" />
-
-          {/* 嘴巴 */}
-          <path
-            className="pd-mouth"
-            d="M50 58 L50 62 M44 64 Q50 68 56 64"
-            stroke="#1a1a1a"
-            strokeWidth="1.8"
-            fill="none"
-            strokeLinecap="round"
-          />
-
-          {/* 腮红（mad 时变红，idle/focus 时淡粉） */}
-          <g className="pd-cheeks">
-            <ellipse className="pd-cheek pd-cheek-l" cx="28" cy="56" rx="4" ry="2.5" fill="#ffb3b3" opacity="0.6" />
-            <ellipse className="pd-cheek pd-cheek-r" cx="72" cy="56" rx="4" ry="2.5" fill="#ffb3b3" opacity="0.6" />
-          </g>
-
-          {/* 庆祝星星（celebrate 时浮现） */}
-          <g className="pd-stars">
-            <path className="pd-star pd-star-1" d="M18 32 l2 5 l5 0 l-4 3 l1 5 l-4 -3 l-4 3 l1 -5 l-4 -3 l5 0 z" fill="#ffd700" />
-            <path className="pd-star pd-star-2" d="M82 34 l1.5 4 l4 0 l-3 2.5 l1 4 l-3.5 -2.5 l-3.5 2.5 l1 -4 l-3 -2.5 l4 0 z" fill="#ffd700" />
-            <path className="pd-star pd-star-3" d="M50 10 l1.5 4 l4 0 l-3 2.5 l1 4 l-3.5 -2.5 l-3.5 2.5 l1 -4 l-3 -2.5 l4 0 z" fill="#ffd700" />
-          </g>
-        </g>
+      <g className="px-wrapper">
+        {renderRects(grid)}
       </g>
     </svg>
   )
