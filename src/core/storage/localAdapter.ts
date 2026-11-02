@@ -41,8 +41,27 @@ export function createLocalAdapter(): StorageAdapter {
   }
 }
 
-/** 导出为文件（备份、日历订阅等） */
+/** 导出为文件（备份、日历订阅等）。
+ *  网页端用 <a download>；原生端 WebView 不支持 download 属性，
+ *  改写到缓存目录再交给系统查看器（会弹「用…打开 / 保存」）。 */
 export async function exportToFile(content: string, filename: string, type = 'application/json') {
+  const { Capacitor } = await import('@capacitor/core')
+  if (Capacitor.isNativePlatform()) {
+    const { Filesystem, Directory } = await import('@capacitor/filesystem')
+    const { FileViewer } = await import('@capacitor/file-viewer')
+    const safeName = filename.replace(/[\\/:*?"<>|]/g, '_')
+    const rel = `exports/${safeName}`
+    await Filesystem.writeFile({
+      path: rel,
+      data: content,
+      directory: Directory.Cache,
+      recursive: true,
+    })
+    const { uri } = await Filesystem.getUri({ path: rel, directory: Directory.Cache })
+    await FileViewer.openDocumentFromLocalPath({ path: uri })
+    return
+  }
+
   const blob = new Blob([content], { type })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

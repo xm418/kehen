@@ -214,16 +214,20 @@ export function AccountPanel() {
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button
               className="btn btn-sm btn-primary"
-              onClick={() =>
-                exportToFile(
-                  buildReminderIcs(
-                    cfg.deadlineHour,
-                    data.habits.filter((h) => !h.archived).map((h) => h.name),
-                  ),
-                  '刻痕提醒.ics',
-                  'text/calendar',
-                )
-              }
+              onClick={async () => {
+                try {
+                  await exportToFile(
+                    buildReminderIcs(
+                      cfg.deadlineHour,
+                      data.habits.filter((h) => !h.archived).map((h) => h.name),
+                    ),
+                    '刻痕提醒.ics',
+                    'text/calendar',
+                  )
+                } catch (err) {
+                  alert('导出失败：' + (err instanceof Error ? err.message : String(err)))
+                }
+              }}
             >
               下载日历提醒
             </button>
