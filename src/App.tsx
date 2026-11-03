@@ -15,7 +15,7 @@ import { SupervisorPet } from './components/SupervisorPet'
 import { FocusNoteSheet } from './components/FocusNoteSheet'
 import { PlanGate } from './components/PlanGate'
 import { useWakeLock } from './hooks/useWakeLock'
-import { applyBackupReminder, applyDailyReminder, notifyGuardHit } from './core/nativeNotify'
+import { applyBackupReminder, notifyGuardHit, scheduleAllReminders } from './core/nativeNotify'
 import { GUARD_LABEL, guardApp, readForeground } from './core/guard'
 import { applySystemBars } from './core/systemBars'
 
@@ -40,6 +40,16 @@ const SETTINGS_TAB: { key: TabKey; label: string; icon: IconName } = {
 
 function isTabKey(h: string): h is TabKey {
   return h === 'settings' || NAV.some((n) => n.key === h)
+}
+
+/** 原生 splash 还盖在上面；WebView 里先跑一个轻量 loading，保证 ready=true 时直接有内容可显示 */
+function AppLoading() {
+  return (
+    <div className="app-loading" aria-hidden="true">
+      <div className="app-loading-mark" />
+      <div className="app-loading-label">刻痕</div>
+    </div>
+  )
 }
 
 export default function App() {
@@ -102,10 +112,18 @@ export default function App() {
     void applySystemBars(data.settings.theme === 'dark')
   }, [data.settings.theme])
 
-  // 装成 APK 时：按截止时间排一条每天重复的本地通知（网页端自动跳过）
+  // 装成 APK 时：启动即排好未来 7 天的 4 条每日提醒；习惯/计划/债务/截止时间变了都重建
   useEffect(() => {
-    void applyDailyReminder(data.settings.supervision.deadlineHour)
-  }, [data.settings.supervision.deadlineHour])
+    if (!ready) return
+    void scheduleAllReminders(data, 7)
+  }, [
+    ready,
+    data.settings.supervision.deadlineHour,
+    data.habits.length,
+    data.debts.length,
+    data.remedials.length,
+    data.plans.length,
+  ])
 
   // 超过 7 天没导出备份就提醒一次；导出后自动改期
   useEffect(() => {
@@ -142,7 +160,7 @@ export default function App() {
     }
   }, [guardActive, guardCfg, actions])
 
-  if (!ready) return <div className="page" />
+  if (!ready) return <AppLoading />
 
   const current = NAV.find((n) => n.key === tab) ?? SETTINGS_TAB
 

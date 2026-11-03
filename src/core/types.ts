@@ -227,13 +227,20 @@ export interface HabitDebt {
   createdAt: Stamp
 }
 
-/** 强制拦截时写下的「我确实没做」的原因 */
+/**
+ * 强制拦截时提交的证明。
+ * reason 必写；process 描述做了什么；evidence 可选图片（base64 或文件路径）。
+ */
 export interface InterceptRecord {
   id: string
   date: DateKey
   habitId: string
   habitName: string
   reason: string
+  /** 过程描述 — 实际做了哪些事、花了多久、卡在哪 */
+  process?: string
+  /** 证据图片 — base64 或本地文件路径 */
+  evidence?: string
   createdAt: Stamp
 }
 

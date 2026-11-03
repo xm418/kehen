@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#0c0c0c" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c0c0c" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="自律监督与每日学习记录" />
@@ -12,9 +12,124 @@
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>刻痕 · 自律与学习记录</title>
+    <style>
+      html, body { background: #0c0c0c; margin: 0; padding: 0; }
+
+      /* React 首次渲染前挡住这一小段空白；颜色与 App 深色主题一致 */
+      #boot-splash {
+        position: fixed; inset: 0; background: #0c0c0c;
+        display: flex; align-items: center; justify-content: center;
+        z-index: 2147483647;
+      }
+      #boot-splash .mark {
+        width: 64px; height: 64px;
+        border-radius: 16px;
+        background: #f2efe9;
+        position: relative;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+      }
+      #boot-splash .mark::before {
+        content: ''; position: absolute; inset: 14px;
+        background: #f2efe9; border-radius: 10px;
+        transform: skewX(-28deg) translateY(4px);
+      }
+      #boot-splash .mark::after {
+        content: ''; position: absolute; right: -2px; bottom: 8px;
+        width: 18px; height: 18px; background: #d94f3c;
+        border-radius: 5px; transform: rotate(8deg);
+      }
+      #boot-splash .label {
+        position: absolute; bottom: 18%; left: 0; right: 0;
+        text-align: center;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+        font-size: 14px; letter-spacing: 0.3em; color: #666;
+      }
+      #boot-splash .ver {
+        position: absolute; bottom: 12%; left: 0; right: 0;
+        text-align: center;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px; letter-spacing: 0.1em; color: #4a4a4a;
+      }
+
+      /* 启动失败兜底：任何阶段抛错都直接显示在屏幕上，避免只剩一层纯色背景 */
+      #fatal-error {
+        position: fixed; inset: 0; z-index: 2147483646;
+        background: #1a0000; color: #ffcccb;
+        padding: 24px 20px; overflow: auto;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 13px; line-height: 1.5;
+        white-space: pre-wrap; word-break: break-word;
+        display: none;
+      }
+      #fatal-error.show { display: block; }
+      #fatal-error .title { color: #ff6b6b; font-weight: bold; margin-bottom: 8px; font-size: 15px; }
+    </style>
   </head>
   <body>
+    <div id="boot-splash" aria-hidden="true">
+      <div class="mark"></div>
+      <div class="label">刻痕</div>
+      <div class="ver">v2.1.10</div>
+    </div>
     <div id="root"></div>
+    <div id="fatal-error"></div>
+    <script>
+      // 启动兜底：window 错误、未捕获 Promise、3 秒内 #root 仍为空，三种情况都会写进 #fatal-error
+      (function () {
+        var box = document.getElementById('fatal-error')
+        var shown = false
+        function showError(type, msg, stack) {
+          if (!box) return
+          shown = true
+          box.innerHTML += '\n\n[' + type + '] ' + msg + (stack ? '\n' + stack : '')
+          box.classList.add('show')
+        }
+        window.addEventListener('error', function (e) {
+          showError('error', e.message || String(e), e.error && e.error.stack ? e.error.stack : e.filename + ':' + e.lineno)
+        }, true)
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason
+          showError('unhandledrejection', r instanceof Error ? r.message : String(r), r instanceof Error ? r.stack : '')
+        }, true)
+        setTimeout(function () {
+          var root = document.getElementById('root')
+          if (root && root.children.length === 0 && !shown) {
+            var info = ''
+            try { info += 'UA: ' + navigator.userAgent.slice(0, 160) + '\n' } catch (x) {}
+            try { info += 'URL: ' + location.href + '\n' } catch (x) {}
+            showError('ROOT_EMPTY', '#root 3 秒内没有 React 子节点', info)
+          }
+        }, 3000)
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // React 首帧落屏后把 boot-splash 淡出；6 秒兜底强制移除
+      (function () {
+        var el = document.getElementById('boot-splash')
+        if (!el) return
+        var done = false
+        function hide() {
+          el.style.transition = 'opacity 220ms ease'
+          el.style.opacity = '0'
+          setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el) }, 260)
+        }
+        var poll = setInterval(function () {
+          if (done) return
+          var root = document.getElementById('root')
+          if (root && root.children.length > 0) {
+            done = true
+            clearInterval(poll)
+            requestAnimationFrame(function () { requestAnimationFrame(hide) })
+          }
+        }, 80)
+        setTimeout(function () {
+          if (done) return
+          done = true
+          clearInterval(poll)
+          hide()
+        }, 6000)
+      })()
+    </script>
   </body>
 </html>

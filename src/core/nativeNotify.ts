@@ -1,18 +1,162 @@
 import { Capacitor } from '@capacitor/core'
+import { parseKey, toKey, weekdayLabel } from './date'
+import { debtSummary, todaysOpenHabits } from './supervision'
+import type { AppData, DateKey } from './types'
 
-/** 只在壳里（APK）跑，网页端直接跳过 */
+/** 只在 APK 里跑，网页端跳过 */
 export function isNativeApp(): boolean {
   return Capacitor.isNativePlatform()
 }
 
-const REMINDER_ID = 1
 const CHANNEL_ID = 'kedu-reminder'
 
 /**
- * 每天固定时间的本地提醒。
- * 装成 APK 之后不依赖任何推送服务，系统自己会到点弹通知。
+ * 通知 id 分段：
+ *   10000 - 19999  = 每日提醒 schedule 槽位（按日偏移 0-6 × 每天 slot 数）
+ *   9001           = 破戒即时提醒
+ *   2              = 备份提醒
+ * 先 cancel 全段再重建，避免重复。
  */
-export async function applyDailyReminder(hour: number): Promise<void> {
+const REMINDER_ID_BASE = 10000
+const REMINDER_ID_END = 20000
+const BACKUP_REMINDER_ID = 2
+const GUARD_REMINDER_ID = 9001
+
+// ---------- 每天的几个提醒时间点 ----------
+interface Slot {
+  hour: number
+  minute: number
+  /** 生成这一条的正文。返回 null 表示今天这条不发（例如睡前没欠账就不催） */
+  make: (data: AppData, date: DateKey) => { title: string; body: string } | null
+}
+
+function listOpenHabits(data: AppData, date: DateKey, max = 5): string {
+  const open = todaysOpenHabits(data, date)
+  if (open.length === 0) return ''
+  const shown = open.slice(0, max).map((h) => h.name)
+  const more = open.length - shown.length
+  let text = shown.join('、')
+  if (more > 0) text += ` 等 ${open.length} 个`
+  return text
+}
+
+function listPlans(data: AppData, date: DateKey, max = 5): string {
+  const plan = data.plans.find((p) => p.date === date)
+  if (!plan) return ''
+  const open = plan.items.filter((i) => !i.done)
+  if (open.length === 0) return ''
+  const shown = open.slice(0, max).map((i) => i.text)
+  const more = open.length - shown.length
+  let text = shown.join('、')
+  if (more > 0) text += ` 等 ${open.length} 项`
+  return text
+}
+
+function listDebts(data: AppData, max = 4): string {
+  const d = debtSummary(data)
+  if (d.open === 0) return ''
+  const shown = d.perHabit.slice(0, max).map((h) => `${h.habitName}×${h.amount}`)
+  const more = d.perHabit.length - shown.length
+  let text = shown.join('，')
+  if (more > 0) text += ` 等 ${d.open} 笔`
+  return text
+}
+
+function listRemedials(data: AppData, max = 4): string {
+  const open = data.remedials.filter((r) => !r.done)
+  if (open.length === 0) return ''
+  const shown = open.slice(0, max).map((r) => `${r.habitName} 断签 ${r.missedDays} 天`)
+  return shown.join('，')
+}
+
+function makeSlots(deadlineHour: number): Slot[] {
+  return [
+    // slot 0: 早上 8:30 — 今日清单
+    {
+      hour: 8,
+      minute: 30,
+      make: (data, date) => {
+        const allActive = data.habits.filter((h) => {
+          if (h.archived) return false
+          if (h.schedule.type === 'weekdays') {
+            const day = parseKey(date).getDay()
+            return h.schedule.days.includes(day)
+          }
+          return true
+        })
+        const planText = listPlans(data, date)
+        const habitText = allActive.length
+          ? allActive.slice(0, 5).map((h) => h.name).join('、') +
+            (allActive.length > 5 ? ` 等 ${allActive.length} 个习惯` : '')
+          : ''
+        if (!habitText && !planText) return null
+        const wd = weekdayLabel(date)
+        const title = `刻痕 · 今天（周${wd}）`
+        let body = ''
+        if (habitText) body = `今日习惯：${habitText}`
+        if (planText) body += (body ? '；' : '') + `计划：${planText}`
+        body += '。刻刻盯着呢。'
+        return { title, body }
+      },
+    },
+    // slot 1: 中午 13:00 — 简短催一催
+    {
+      hour: 13,
+      minute: 0,
+      make: (data, date) => {
+        const open = listOpenHabits(data, date, 3)
+        if (!open) {
+          // 上午就全清了，夸一下
+          return { title: '刻痕 · 上午全清 🎉', body: '好习惯保持住。下午别让它翻车。' }
+        }
+        return { title: '刻痕 · 别躺平了', body: `今天还欠：${open}。` }
+      },
+    },
+    // slot 2: 截止时间 — 盘点今天没做完的
+    {
+      hour: deadlineHour,
+      minute: 0,
+      make: (data, date) => {
+        const open = listOpenHabits(data, date, 5)
+        const plan = listPlans(data, date, 3)
+        if (!open && !plan) {
+          return { title: '刻痕 · 今天全做完了 ✨', body: '没有漏项，今天是胜利。' }
+        }
+        let body = ''
+        if (open) body = `还没做完的习惯：${open}`
+        if (plan) body += (body ? '；' : '') + `计划未完成：${plan}`
+        return { title: '刻痕 · 到点了，盘点一下', body: body + '。' }
+      },
+    },
+    // slot 3: 睡前 22:30 — 复盘 + 欠账
+    {
+      hour: 22,
+      minute: 30,
+      make: (data, date) => {
+        const open = listOpenHabits(data, date, 3)
+        const debts = listDebts(data, 3)
+        const rems = listRemedials(data, 2)
+        if (!open && !debts && !rems) return null // 没欠账，不打扰
+        let body = ''
+        if (open) body += `今日未完成：${open}。`
+        if (debts) body += ` 欠账：${debts}。`
+        if (rems) body += ` 补救任务：${rems}。`
+        return { title: '刻痕 · 睡前复盘', body: body + '。明天一起还。' }
+      },
+    },
+  ]
+}
+
+// ---------- 核心：schedule 未来 N 天所有提醒 ----------
+
+/**
+ * 先清理旧的（id 10000-20000），再 schedule 未来 `daysAhead` 天的所有 slot。
+ * 每次 App 启动 / 设置变更都可以调用，幂等。
+ */
+export async function scheduleAllReminders(
+  data: AppData,
+  daysAhead = 7,
+): Promise<void> {
   if (!isNativeApp()) return
   const { LocalNotifications } = await import('@capacitor/local-notifications')
 
@@ -23,41 +167,110 @@ export async function applyDailyReminder(hour: number): Promise<void> {
       if (req.display !== 'granted') return
     }
 
+    // 先确保 channel 存在
     await LocalNotifications.createChannel({
       id: CHANNEL_ID,
       name: '每日提醒',
-      description: '到点提醒今天还没做完的事',
+      description: '刻痕每天的任务盘点和催促',
       importance: 4,
       visibility: 1,
     })
 
+    // 清理 id 段：先查 pending 再 cancel，避免无效调用
     const pending = await LocalNotifications.getPending()
-    const old = pending.notifications.filter((n) => n.id === REMINDER_ID)
-    if (old.length) {
-      await LocalNotifications.cancel({ notifications: old.map((n) => ({ id: n.id })) })
+    const toCancel = pending.notifications.filter(
+      (n) => typeof n.id === 'number' && n.id >= REMINDER_ID_BASE && n.id < REMINDER_ID_END,
+    )
+    if (toCancel.length > 0) {
+      await LocalNotifications.cancel({ notifications: toCancel.map((n) => ({ id: n.id })) })
     }
 
+    // 构建 schedule
+    const slots = makeSlots(data.settings.supervision.deadlineHour || 21)
+    const notifications: {
+      id: number
+      title: string
+      body: string
+      channelId: string
+      schedule: { at: Date; allowWhileIdle: boolean }
+    }[] = []
+
+    const now = new Date()
+    for (let offset = 0; offset < daysAhead; offset++) {
+      const date = new Date()
+      date.setDate(date.getDate() + offset)
+      const dk = toKey(date)
+
+      for (const slot of slots) {
+        // deadlineHour 为 0 表示用户关掉了截止提醒
+        if (offset === 0 && slot.hour === data.settings.supervision.deadlineHour && slot.hour === 0) continue
+        const payload = slot.make(data, dk)
+        if (!payload) continue
+
+        const at = new Date(date)
+        at.setHours(slot.hour, slot.minute, 0, 0)
+        // 已过的时间点，跳到明天
+        if (at.getTime() <= now.getTime()) continue
+
+        const id = REMINDER_ID_BASE + offset * 10 + slots.indexOf(slot)
+        notifications.push({
+          id,
+          title: payload.title,
+          body: payload.body,
+          channelId: CHANNEL_ID,
+          schedule: { at, allowWhileIdle: true },
+        })
+      }
+    }
+
+    if (notifications.length === 0) return
+    await LocalNotifications.schedule({ notifications })
+  } catch (err) {
+    console.error('scheduleAllReminders failed', err)
+  }
+}
+
+// ---------- 旧接口保留，但内部改走同一个 channel ----------
+
+const OLD_REMINDER_ID = 1 // 兼容之前留下的旧 id，下次 scheduleAllReminders 会清理掉
+
+/**
+ * 老接口：每天固定时间重复提醒。
+ * 现在改走 scheduleAllReminders（它会覆盖所有旧 id），留空壳避免外部调用崩。
+ */
+export async function applyDailyReminder(hour: number): Promise<void> {
+  // 调用方现在应该用 scheduleAllReminders(data) 来替代
+  // 这里仅保留一条"兜底"的 repeats 提醒（当用户完全没打开 App 时保底）
+  if (!isNativeApp()) return
+  if (!hour || hour < 1 || hour > 23) return
+  const { LocalNotifications } = await import('@capacitor/local-notifications')
+  try {
+    await LocalNotifications.createChannel({
+      id: CHANNEL_ID,
+      name: '每日提醒',
+      description: '刻痕每天的任务盘点和催促',
+      importance: 4,
+      visibility: 1,
+    })
     await LocalNotifications.schedule({
       notifications: [
         {
-          id: REMINDER_ID,
-          title: '刻刻 · 今天的习惯还没做完 😺',
-          body: `已经 ${hour}:00 了，我看着呢。别让它断。`,
+          id: OLD_REMINDER_ID,
+          title: '刻痕 · 到点了',
+          body: `已经 ${hour}:00，打开 App 看看今天还有什么没做完。`,
           channelId: CHANNEL_ID,
           schedule: { on: { hour, minute: 0 }, repeats: true, allowWhileIdle: true },
         },
       ],
     })
   } catch (err) {
-    console.error('本地提醒设置失败', err)
+    console.error('applyDailyReminder failed', err)
   }
 }
 
-const BACKUP_REMINDER_ID = 2
-
 /**
- * 距离上次导出超过 7 天才提醒一次；刚导出过不会被催。
- * 只调度一条一次性通知，打开 App 时按最新的导出时间重排。
+ * 7 天没导出就提醒一次；刚导出过就往后顺。
+ * 这条独立通道，不被 scheduleAllReminders 清理。
  */
 export async function applyBackupReminder(enabled: boolean, lastExportedAt?: string): Promise<void> {
   if (!isNativeApp()) return
@@ -80,12 +293,10 @@ export async function applyBackupReminder(enabled: boolean, lastExportedAt?: str
       at.setTime(last.getTime() + 7 * 24 * 60 * 60 * 1000)
       at.setHours(20, 0, 0, 0)
     } else {
-      // 从没导出过：下一个周日 20:00
       at.setHours(20, 0, 0, 0)
       at.setDate(at.getDate() + ((7 - at.getDay()) % 7))
       if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 7)
     }
-    // 已经逾期：改成明天 20:00，避免一打开 App 就弹
     if (at.getTime() <= Date.now()) {
       const t = new Date()
       t.setDate(t.getDate() + 1)
@@ -110,8 +321,7 @@ export async function applyBackupReminder(enabled: boolean, lastExportedAt?: str
 }
 
 /**
- * 专注期间被发现刷视频/打游戏/看小说：立刻弹一条本地通知。
- * 通知 id 固定，连着被抓到只更新这一条，不刷屏。
+ * 专注期被抓到刷视频/打游戏/看小说：立刻弹一条。
  */
 export async function notifyGuardHit(appName: string, label: string): Promise<void> {
   if (!isNativeApp()) return
@@ -122,7 +332,7 @@ export async function notifyGuardHit(appName: string, label: string): Promise<vo
     await LocalNotifications.schedule({
       notifications: [
         {
-          id: 9001,
+          id: GUARD_REMINDER_ID,
           title: '刻刻 · 破戒了 😤',
           body: `刚刚在${label}（${appName}），我看到了。关掉它，回来。`,
           channelId: CHANNEL_ID,

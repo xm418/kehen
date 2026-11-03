@@ -168,7 +168,10 @@ export interface StoreActions {
   replaceData: (next: AppData) => void
   resetData: () => void
 
-  recordIntercept: (habitId: string, reason: string) => void
+  recordIntercept: (
+    habitId: string,
+    payload: { reason: string; process?: string; evidence?: string },
+  ) => void
   completeRemedial: (id: string) => void
   repayDebt: (debtId: string) => void
 
@@ -299,7 +302,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  // 启动时读取本地数据；已登录则和云端对一次
+  // 启动时读取本地数据 → 先显示出来 → 后台尝试云端同步
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -314,65 +317,63 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
       const next = normalizeData(parsed)
       const { account } = next.settings
+      // 先把本地数据摆上去，别让用户对着白屏等
+      setData(next)
+      setReady(true)
+
+      // 已登录云账号 → 后台同步（不阻塞 UI）
       if (next.settings.sync.mode === 'cloud' && account?.token) {
-        try {
-          const endpoint = next.settings.sync.endpoint
-          const snap = await syncPull(endpoint, account.token)
-          revisionCache.set(codeKey(endpoint, account.token), snap.revision)
-          // 云端词库并回本地：老客户端整包推送会把词表推空，重开时兜底不让词丢失
-          if (snap.data && Array.isArray(snap.data.words)) {
-            const have = new Set((next.words || []).map((w) => String(w.word).toLowerCase()))
-            const merged = [...(next.words || [])]
-            for (const w of snap.data.words as WordItem[]) {
-              const k = String(w?.word || '').toLowerCase()
-              if (!k || have.has(k)) continue
-              have.add(k)
-              merged.push(w)
-            }
-            next.words = merged
-          }
-          const localChanged = readChangedAt()
-          if (snap.data && (!localChanged || (snap.updatedAt ?? '') > localChanged)) {
+        ;(async () => {
+          try {
+            const endpoint = next.settings.sync.endpoint
+            const snap = await syncPull(endpoint, account.token)
             if (!alive) return
-            const pulled = normalizeData(snap.data)
-            // 登录凭证只认本机：云端数据里没有 account 时也不能把自己踢下线
-            pulled.settings.account = account
-            // 云端较新时也别把本机刚导入的计划/单词丢掉，合并进去
-            const byDate = new Map(pulled.plans.map((p) => [p.date, p]))
-            for (const p of next.plans) {
-              const exist = byDate.get(p.date)
-              if (!exist) {
-                pulled.plans.push(p)
-              } else {
-                const texts = new Set(exist.items.map((i) => i.text.trim()))
-                for (const it of p.items) {
-                  if (!texts.has(it.text.trim())) {
-                    exist.items.push(it)
-                    texts.add(it.text.trim())
+            revisionCache.set(codeKey(endpoint, account.token), snap.revision)
+            // 云端词库并回本地：老客户端整包推送会把词表推空，重开时兜底不让词丢失
+            const currentWords = dataRef.current.words || []
+            if (snap.data && Array.isArray(snap.data.words)) {
+              const have = new Set(currentWords.map((w) => String(w.word).toLowerCase()))
+              const merged = [...currentWords]
+              for (const w of snap.data.words as WordItem[]) {
+                const k = String(w?.word || '').toLowerCase()
+                if (!k || have.has(k)) continue
+                have.add(k)
+                merged.push(w)
+              }
+              // 合并进云端数据前先把本地词加上去
+              if (snap.data.words) snap.data.words = merged
+            }
+            const localChanged = readChangedAt()
+            if (snap.data && (!localChanged || (snap.updatedAt ?? '') > localChanged)) {
+              const pulled = normalizeData(snap.data)
+              pulled.settings.account = account
+              // 云端较新时也别把本机刚导入的计划/单词丢掉，合并进去
+              const localPlans = dataRef.current.plans ?? []
+              const byDate = new Map(pulled.plans.map((p) => [p.date, p]))
+              for (const p of localPlans) {
+                const exist = byDate.get(p.date)
+                if (!exist) {
+                  pulled.plans.push(p)
+                } else {
+                  const texts = new Set(exist.items.map((i) => i.text.trim()))
+                  for (const it of p.items) {
+                    if (!texts.has(it.text.trim())) {
+                      exist.items.push(it)
+                      texts.add(it.text.trim())
+                    }
                   }
                 }
               }
+              pulled.plans.sort((a, b) => (a.date < b.date ? -1 : 1))
+              // 同步到全局（避免用闭包里可能过期的 next）
+              setData(pulled)
+              setSync({ state: 'ok', message: '已从云端载入', at: snap.updatedAt ?? undefined })
             }
-            pulled.plans.sort((a, b) => (a.date < b.date ? -1 : 1))
-            const have = new Set((pulled.words || []).map((w) => String(w.word).toLowerCase()))
-            for (const w of next.words || []) {
-              const k = String(w?.word || '').toLowerCase()
-              if (!k || have.has(k)) continue
-              have.add(k)
-              pulled.words.push(w)
-            }
-            setData(pulled)
-            setSync({ state: 'ok', message: '已从云端载入', at: snap.updatedAt ?? undefined })
-            setReady(true)
-            return
+          } catch (err) {
+            if (alive) setSync({ state: 'error', message: err instanceof Error ? err.message : '云端读取失败' })
           }
-        } catch (err) {
-          if (alive) setSync({ state: 'error', message: err instanceof Error ? err.message : '云端读取失败' })
-        }
+        })()
       }
-      if (!alive) return
-      setData(next)
-      setReady(true)
     })()
     return () => {
       alive = false
@@ -1179,23 +1180,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setData(createInitialData())
       },
 
-      recordIntercept(habitId, reason) {
+      recordIntercept(habitId, payload) {
         update((d) => {
           const habit = d.habits.find((h) => h.id === habitId)
           if (!habit) return d
           const today = todayKey()
-          const text = reason.trim()
+          const reason = payload.reason.trim()
+          const process = payload.process?.trim() || undefined
+          const evidence = payload.evidence?.trim() || undefined
           const dup = d.intercepts.find((r) => r.date === today && r.habitId === habitId)
-          if (dup) dup.reason = text
-          else
+          if (dup) {
+            dup.reason = reason
+            dup.process = process
+            dup.evidence = evidence
+          } else {
             d.intercepts.push({
               id: uid('i'),
               date: today,
               habitId,
               habitName: habit.name,
-              reason: text,
+              reason,
+              process,
+              evidence,
               createdAt: new Date().toISOString(),
             })
+          }
           return d
         })
       },
