@@ -15,43 +15,7 @@
     <style>
       html, body { background: #0c0c0c; margin: 0; padding: 0; }
 
-      /* React 首次渲染前挡住这一小段空白；颜色与 App 深色主题一致 */
-      #boot-splash {
-        position: fixed; inset: 0; background: #0c0c0c;
-        display: flex; align-items: center; justify-content: center;
-        z-index: 2147483647;
-      }
-      #boot-splash .mark {
-        width: 64px; height: 64px;
-        border-radius: 16px;
-        background: #f2efe9;
-        position: relative;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-      }
-      #boot-splash .mark::before {
-        content: ''; position: absolute; inset: 14px;
-        background: #f2efe9; border-radius: 10px;
-        transform: skewX(-28deg) translateY(4px);
-      }
-      #boot-splash .mark::after {
-        content: ''; position: absolute; right: -2px; bottom: 8px;
-        width: 18px; height: 18px; background: #d94f3c;
-        border-radius: 5px; transform: rotate(8deg);
-      }
-      #boot-splash .label {
-        position: absolute; bottom: 18%; left: 0; right: 0;
-        text-align: center;
-        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-        font-size: 14px; letter-spacing: 0.3em; color: #666;
-      }
-      #boot-splash .ver {
-        position: absolute; bottom: 12%; left: 0; right: 0;
-        text-align: center;
-        font-family: ui-monospace, Menlo, Consolas, monospace;
-        font-size: 11px; letter-spacing: 0.1em; color: #4a4a4a;
-      }
-
-      /* 启动失败兜底：任何阶段抛错都直接显示在屏幕上，避免只剩一层纯色背景 */
+      /* 启动失败兜底：任何阶段抛错都直接显示在屏幕上 */
       #fatal-error {
         position: fixed; inset: 0; z-index: 2147483646;
         background: #1a0000; color: #ffcccb;
@@ -66,15 +30,10 @@
     </style>
   </head>
   <body>
-    <div id="boot-splash" aria-hidden="true">
-      <div class="mark"></div>
-      <div class="label">刻痕</div>
-      <div class="ver">v2.1.10</div>
-    </div>
     <div id="root"></div>
     <div id="fatal-error"></div>
     <script>
-      // 启动兜底：window 错误、未捕获 Promise、3 秒内 #root 仍为空，三种情况都会写进 #fatal-error
+      // 启动兜底：window 错误、未捕获 Promise、3 秒内 #root 仍为空
       (function () {
         var box = document.getElementById('fatal-error')
         var shown = false
@@ -103,33 +62,5 @@
       })()
     </script>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // React 首帧落屏后把 boot-splash 淡出；6 秒兜底强制移除
-      (function () {
-        var el = document.getElementById('boot-splash')
-        if (!el) return
-        var done = false
-        function hide() {
-          el.style.transition = 'opacity 220ms ease'
-          el.style.opacity = '0'
-          setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el) }, 260)
-        }
-        var poll = setInterval(function () {
-          if (done) return
-          var root = document.getElementById('root')
-          if (root && root.children.length > 0) {
-            done = true
-            clearInterval(poll)
-            requestAnimationFrame(function () { requestAnimationFrame(hide) })
-          }
-        }, 80)
-        setTimeout(function () {
-          if (done) return
-          done = true
-          clearInterval(poll)
-          hide()
-        }, 6000)
-      })()
-    </script>
   </body>
 </html>

@@ -42,16 +42,6 @@ function isTabKey(h: string): h is TabKey {
   return h === 'settings' || NAV.some((n) => n.key === h)
 }
 
-/** 原生 splash 还盖在上面；WebView 里先跑一个轻量 loading，保证 ready=true 时直接有内容可显示 */
-function AppLoading() {
-  return (
-    <div className="app-loading" aria-hidden="true">
-      <div className="app-loading-mark" />
-      <div className="app-loading-label">刻痕</div>
-    </div>
-  )
-}
-
 export default function App() {
   const { data, ready, justFinished, actions, focusPrompt } = useStore()
   const [tab, setTabState] = useState<TabKey>(() => {
@@ -160,7 +150,7 @@ export default function App() {
     }
   }, [guardActive, guardCfg, actions])
 
-  if (!ready) return <AppLoading />
+  if (!ready) return null
 
   const current = NAV.find((n) => n.key === tab) ?? SETTINGS_TAB
 
