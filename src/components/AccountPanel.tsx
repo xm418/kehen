@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../state/store'
 import { Field } from './Sheet'
-import { buildReminderIcs } from '../core/ics'
-import { exportToFile } from '../core/storage/localAdapter'
+import { addDailyReminderToCalendar } from '../core/calendar'
 import { isNativeApp } from '../core/nativeNotify'
 
 interface InstallEvent extends Event {
@@ -47,6 +46,7 @@ export function AccountPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [endpoint, setEndpoint] = useState(data.settings.sync.endpoint ?? '')
+  const [calendarTip, setCalendarTip] = useState('')
   // 安装包里没有同源的 /api，相对地址连不上，需要填完整地址
   const endpointMissing = isNativeApp() && !endpoint.trim()
 
@@ -216,27 +216,29 @@ export function AccountPanel() {
               className="btn btn-sm btn-primary"
               onClick={async () => {
                 try {
-                  await exportToFile(
-                    buildReminderIcs(
-                      cfg.deadlineHour,
-                      data.habits.filter((h) => !h.archived).map((h) => h.name),
-                    ),
-                    '刻痕提醒.ics',
-                    'text/calendar',
+                  const mode = await addDailyReminderToCalendar(
+                    cfg.deadlineHour,
+                    data.habits.filter((h) => !h.archived).map((h) => h.name),
+                  )
+                  setCalendarTip(
+                    mode === 'calendar'
+                      ? '已经打开日历的新建日程页，点右上角「保存」即可。'
+                      : '已下载 .ics 文件，用系统日历打开导入。',
                   )
                 } catch (err) {
-                  alert('导出失败：' + (err instanceof Error ? err.message : String(err)))
+                  alert('添加失败：' + (err instanceof Error ? err.message : String(err)))
                 }
               }}
             >
-              下载日历提醒
+              添加到系统日历
             </button>
             <span className="card-sub" style={{ margin: 0 }}>
-              每天重复 · 改截止时间后重新导入一次
+              每天重复 · 改截止时间后先删掉旧日程再加一次
             </span>
           </div>
+          {calendarTip ? <div className="card-sub">{calendarTip}</div> : null}
           <div className="card-sub">
-            iPhone：用「日历」打开下载的文件；安卓：用系统日历打开。导入后建议把事件设成全天可见。
+            安卓：直接跳到系统日历的新建日程页，记得点保存；iPhone / 网页端：下载 .ics 后用「日历」打开。
           </div>
         </div>
       </section>

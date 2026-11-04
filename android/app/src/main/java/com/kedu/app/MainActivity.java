@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(GuardWatchPlugin.class);
         registerPlugin(AppUpdaterPlugin.class);
         registerPlugin(SystemBarsPlugin.class);
+        registerPlugin(KehenCalendarPlugin.class);
         super.onCreate(savedInstanceState);
         // 不要给 android.R.id.content 设置 WindowInsets listener 或 padding：
         // 那会覆盖 Capacitor 自己的 insets 处理，把 WebView 父容器压扁，看起来像白屏。
