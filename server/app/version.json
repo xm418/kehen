@@ -1,7 +1,7 @@
 {
-  "version": "2.1.10",
-  "versionCode": 41,
-  "notes": "刻痕 v2.1.10 · 这一版是对比 1.3 / 2.1.0 / 2.1.9 三个 APK 后找到的真因：唯一的变化是 2.1.x 多了 @capacitor/splash-screen 插件。该插件会安装一层 AndroidX SplashScreen 覆盖层，而主题里没有配 postSplashScreenTheme，导致这层浅灰启动图永久盖在 WebView 上——页面其实早加载好了，只是被遮住。此版已彻底卸载该插件、插件清单恢复成和 v1.3 完全一致（file-viewer / filesystem / local-notifications 三个），Manifest 主题也恢复为 v1.3 的 AppTheme.NoActionBarLaunch。versionCode 41，可直接覆盖安装。",
-  "url": "/download/kehen-2.1.10.apk",
-  "releasedAt": "2026-11-03"
+  "version": "2.1.12",
+  "versionCode": 43,
+  "notes": "刻痕 v2.1.12 · 修复「把每日提醒写进系统日历」失败的问题：安卓上 text/calendar 只有聊天类应用注册，系统日历不接收 .ics，点了只会弹出选择框。此版新增 KehenCalendar 原生插件，用 ACTION_INSERT 直接拉起系统日历的新建日程页，标题、开始/结束时间、时区、每日重复规则全部预填，点保存即可。网页端与 iPhone 仍退回 .ics 下载。另外 v2.1.11 的启动闪图清理和后台提醒权限也在这一版里。versionCode 43，可直接覆盖安装。",
+  "url": "/download/kehen-2.1.12.apk",
+  "releasedAt": "2026-11-04"
 }
