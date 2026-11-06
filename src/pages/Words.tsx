@@ -3,13 +3,14 @@ import { Icon } from '../components/Icons'
 import { Sheet, Field } from '../components/Sheet'
 import { WordDetailSheet, WordEntries } from '../components/WordDetailSheet'
 import { QuizSheet } from '../components/QuizSheet'
+import { WordStatsSheet } from '../components/WordStatsSheet'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
 import { KAOYAN_WORDS, parseWordLines, type WordSeed } from '../core/wordbank'
-import { REVIEW_INTERVALS } from '../core/store-model'
+import { GRADE_AGAIN, GRADE_EASY, GRADE_GOOD, GRADE_HARD, MASTER_STAGE, sm2Rate } from '../core/sm2'
 import { speakWord } from '../core/speech'
 import { dictLookup } from '../core/storage/cloudAdapter'
-import { loadWordDetail, readCachedDetail, type WordDetail } from '../core/wordDetail'
+import { loadWordDetail, readLocalDetail, type WordDetail } from '../core/wordDetail'
 import type { WordItem } from '../core/types'
 
 const AUTO_SPEAK_KEY = 'kedu:wordAutoSpeak'
@@ -108,6 +109,7 @@ export function WordsPage() {
   const [manage, setManage] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [quizOpen, setQuizOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameDraft, setRenameDraft] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -132,7 +134,7 @@ export function WordsPage() {
       setCurrentDetail(null)
       return
     }
-    const cached = readCachedDetail(currentWord)
+    const cached = readLocalDetail(currentWord)
     if (cached) {
       setCurrentDetail(cached)
       return
@@ -156,7 +158,7 @@ export function WordsPage() {
   const openDetail = (w: WordItem) => {
     detailWordRef.current = w.word
     setDetailFor(w)
-    const cached = readCachedDetail(w.word)
+    const cached = readLocalDetail(w.word)
     setDetailData(cached)
     setDetailLoading(!cached)
     if (cached) return
@@ -189,12 +191,12 @@ export function WordsPage() {
     setCursor((c) => (queue.length > 1 ? (c + 1) % queue.length : 0))
   }
 
-  const rate = (known: boolean) => {
+  const rate = (quality: number) => {
     if (!current) return
-    actions.rateWord(current.id, known)
+    actions.rateWord(current.id, quality)
     setFlipped(false)
-    // 认识：这个词今天不再出现，队列变短后游标自然指向下一个；不认识：它还在队列里，先跳过去
-    if (!known) nextCard()
+    // 过关的词今天不再出现，队列变短后游标自然指向下一个；「重来」还在队列里，先跳过去
+    if (quality < GRADE_HARD) nextCard()
   }
 
   /** 测验优先用还没掌握的词，不够再拿全部 */
@@ -308,6 +310,9 @@ export function WordsPage() {
         <div className="row" style={{ gap: 6, flex: 'none' }}>
           <button className="btn btn-sm" onClick={() => setImportOpen(true)}>
             导入
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={() => setStatsOpen(true)}>
+            统计
           </button>
           <button className="btn btn-sm btn-ghost" onClick={() => setQuizOpen(true)} disabled={quizPool.length === 0}>
             测验
@@ -501,25 +506,40 @@ export function WordsPage() {
             )}
             {flipped && current.example ? <div className="word-example">{current.example}</div> : null}
           </div>
-          <div className="row" style={{ gap: 8, marginTop: 16 }}>
-            <button
-              className="btn btn-block"
-              onClick={(e) => {
-                e.stopPropagation()
-                rate(false)
-              }}
-            >
-              不认识
-            </button>
-            <button
-              className="btn btn-block btn-primary"
-              onClick={(e) => {
-                e.stopPropagation()
-                rate(true)
-              }}
-            >
-              认识
-            </button>
+          {/* 四档评分（学 Anki）：每档下面标注下次复习间隔，按真实感觉选 */}
+          <div className="row" style={{ gap: 6, marginTop: 16 }}>
+            {(
+              [
+                { q: GRADE_AGAIN, label: '重来', primary: false },
+                { q: GRADE_HARD, label: '困难', primary: false },
+                { q: GRADE_GOOD, label: '良好', primary: true },
+                { q: GRADE_EASY, label: '简单', primary: false },
+              ] as const
+            ).map((g) => {
+              const r = sm2Rate(current, g.q)
+              const hint = g.q < GRADE_HARD ? '今天再来' : r.familiar === 1 ? '掌握' : `${r.interval} 天后`
+              return (
+                <button
+                  key={g.q}
+                  className={`btn${g.primary ? ' btn-primary' : ''}`}
+                  style={{
+                    flex: 1,
+                    padding: '6px 2px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    rate(g.q)
+                  }}
+                >
+                  <span style={{ fontSize: 13.5, fontWeight: 600 }}>{g.label}</span>
+                  <span style={{ fontSize: 10, opacity: 0.68, fontFamily: 'var(--mono)' }}>{hint}</span>
+                </button>
+              )
+            })}
           </div>
           <div className="row-between" style={{ marginTop: 10 }}>
             <span className="muted" style={{ fontSize: 11.5 }}>
@@ -536,9 +556,9 @@ export function WordsPage() {
             </button>
           </div>
           <div className="muted" style={{ fontSize: 11, textAlign: 'center', marginTop: 6 }}>
-            {current.stage > 0 && current.stage < REVIEW_INTERVALS.length
-              ? `答对后 ${REVIEW_INTERVALS[current.stage - 1]} 天再复习，还有 ${REVIEW_INTERVALS.length - current.stage} 轮掌握`
-              : '答对后按 1/3/7/15/30/90 天递增复习'}
+            {current.stage === 0
+              ? '新词：按真实感觉选，间隔会跟着你的评价调整'
+              : `第 ${current.stage} 轮 · 连续答对 ${MASTER_STAGE} 轮算掌握`}
           </div>
         </div>
       ) : (
@@ -641,25 +661,27 @@ export function WordsPage() {
         footer={
           detailFor ? (
             <div className="stack" style={{ gap: 8 }}>
-              <div className="row" style={{ gap: 8 }}>
-                <button
-                  className="btn btn-block"
-                  onClick={() => {
-                    actions.rateWord(detailFor.id, false)
-                    closeDetail()
-                  }}
-                >
-                  不认识
-                </button>
-                <button
-                  className="btn btn-block btn-primary"
-                  onClick={() => {
-                    actions.rateWord(detailFor.id, true)
-                    closeDetail()
-                  }}
-                >
-                  认识
-                </button>
+              <div className="row" style={{ gap: 6 }}>
+                {(
+                  [
+                    { q: GRADE_AGAIN, label: '重来' },
+                    { q: GRADE_HARD, label: '困难' },
+                    { q: GRADE_GOOD, label: '良好' },
+                    { q: GRADE_EASY, label: '简单' },
+                  ] as const
+                ).map((g) => (
+                  <button
+                    key={g.q}
+                    className={`btn btn-sm${g.q === GRADE_GOOD ? ' btn-primary' : ''}`}
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      actions.rateWord(detailFor.id, g.q)
+                      closeDetail()
+                    }}
+                  >
+                    {g.label}
+                  </button>
+                ))}
               </div>
               {detailFor.wrong ? (
                 <button
@@ -689,6 +711,9 @@ export function WordsPage() {
 
       {/* 测验 */}
       <QuizSheet open={quizOpen} words={quizPool} onClose={() => setQuizOpen(false)} />
+
+      {/* 学习统计 */}
+      <WordStatsSheet open={statsOpen} onClose={() => setStatsOpen(false)} />
 
       {/* 改组名 */}
       <Sheet

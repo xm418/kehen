@@ -8,6 +8,9 @@ export type HabitSchedule =
   | { type: 'weekdays'; days: number[] } // 0=周日 … 6=周六
   | { type: 'weekly'; times: number } // 每周几次
 
+/** 习惯适合在哪个时段做（用户可手动设，也可由历史打卡时间自动推荐） */
+export type EnergySlot = 'morning' | 'midday' | 'afternoon' | 'evening' | 'any'
+
 export interface Habit {
   id: string
   name: string
@@ -17,6 +20,8 @@ export interface Habit {
   createdAt: DateKey
   archived: boolean
   sort: number
+  /** 你的高效时段：哪个时间段最适合做这件事 */
+  preferredSlot?: EnergySlot
 }
 
 export interface HabitLog {
@@ -25,6 +30,10 @@ export interface HabitLog {
   count: number
   /** 事后补录的打卡，不算进连续天数，避免数字骗自己 */
   backfill?: boolean
+  /** 打卡发生的具体时间（用来推断高效时段） */
+  markedAt?: Stamp
+  /** 标记为休息日：生病/旅行/刻意放松——既不算完成也不算断签 */
+  restDay?: boolean
 }
 
 export type TimerMode = 'focus' | 'break'
@@ -332,7 +341,7 @@ export interface WordItem {
   addedAt: Stamp
   /** 「不认识」的次数，越多排越前 */
   reviewCount: number
-  /** 已完成的复习轮次：0 是新词，到 REVIEW_INTERVALS.length 算掌握 */
+  /** 已完成的复习轮次：0 是新词，连续答对 MASTER_STAGE 轮算掌握 */
   stage: number
   /** 下次复习日期，空表示今天不用再学 */
   nextReviewAt?: DateKey
@@ -340,12 +349,40 @@ export interface WordItem {
   lastStudiedAt?: DateKey
   /** 错过（点不认识或测验答错），进错词本 */
   wrong?: boolean
+  /** SM-2 难度系数：默认 2.5，答错下调，最低 1.3 */
+  easeFactor?: number
+  /** 当前一轮的间隔天数（0 表示还没排） */
+  interval?: number
+}
+
+/** 某一天的单词学习量，给统计曲线用 */
+export interface WordDayStat {
+  date: DateKey
+  /** 当天一共学了多少个（新学 + 复习） */
+  count: number
+  newCount: number
+  reviewCount: number
+}
+
+/** 成就徽章定义：纯前端检查，达成条件后解锁 */
+export interface Achievement {
+  id: string
+  title: string
+  icon: string
+  desc: string
+  unlockedAt?: Stamp
 }
 
 export interface AppData {
   version: number
   words: WordItem[]
   wordProgress: WordProgress
+  /** 每天学词量的历史记录，统计页画曲线用 */
+  wordHistory: WordDayStat[]
+  /** 已解锁的成就徽章，id 对应 ACHIEVEMENTS 里的定义 */
+  achievements: string[]
+  /** 专注扭蛋：收集到的奖励条目，每次完成专注（≥15min）抽一个 */
+  focusGacha: string[]
   habits: Habit[]
   habitLogs: HabitLog[]
   sessions: FocusSession[]

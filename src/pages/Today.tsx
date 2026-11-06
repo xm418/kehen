@@ -8,6 +8,7 @@ import {
   isHabitDone,
   dueReviews,
   focusByDay,
+  buildDailyAdvice,
 } from '../core/stats'
 import { formatFull, formatShort, timeToText, weekdayLabel } from '../core/date'
 import { Ring, SparkBars } from '../components/Charts'
@@ -36,6 +37,9 @@ export function TodayPage({ goTo }: { goTo: (t: Tab) => void }) {
     ...data.habits.filter((h) => !h.archived).map((h) => habitStreak(h, data.habitLogs, today).current),
   )
   const trend = focusByDay(data.sessions, today, 7)
+
+  // 今日行动建议：规则化 AI 教练
+  const advice = buildDailyAdvice(data, today)
 
   // 单词模块的今日进度，首页给一个入口，不用每次都切到单词页看
   const wordGoal = data.settings.words.dailyGoal
@@ -96,6 +100,37 @@ export function TodayPage({ goTo }: { goTo: (t: Tab) => void }) {
       </div>
 
       <TodayPlanCard onFocus={() => goTo('focus')} />
+
+      {advice.length > 0 ? (
+        <section className="card" style={{ marginBottom: 12 }}>
+          <div className="card-head">
+            <div>
+              <h3 className="card-title">今天第一件事</h3>
+              <div className="card-sub">根据你的习惯、专注和历史数据，挑了几条现在最值得做的</div>
+            </div>
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            {advice.map((a, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                  padding: '8px 10px',
+                  background: 'var(--bg-elev)',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  lineHeight: 1.65,
+                }}
+              >
+                <span style={{ fontSize: 22, lineHeight: 1 }}>{a.emoji}</span>
+                <span style={{ flex: 1 }}>{a.text}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="card" style={{ marginBottom: 12 }}>
         <div className="row-between" style={{ marginBottom: 10 }}>

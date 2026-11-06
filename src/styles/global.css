@@ -983,6 +983,31 @@ a {
   color: var(--muted);
 }
 
+/* 拼写测验：词长提示与答错后的逐字母对照 */
+.spell-hint {
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: 3px;
+  color: var(--muted);
+}
+
+.spell-diff {
+  font-family: var(--mono);
+  font-size: 20px;
+  letter-spacing: 3px;
+  text-align: center;
+}
+
+.spell-diff .ok {
+  color: var(--ink);
+}
+
+.spell-diff .bad {
+  color: var(--danger);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .bar-row {
   display: grid;
   grid-template-columns: 82px 1fr 56px;
@@ -1752,4 +1777,9 @@ mark.hl {
   color: var(--text-2);
   margin-top: 6px;
   letter-spacing: 0.02em;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }

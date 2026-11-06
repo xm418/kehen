@@ -39,6 +39,8 @@ export function QuizSheet({
   const [results, setResults] = useState<boolean[]>([])
   const [input, setInput] = useState('')
   const [judged, setJudged] = useState<null | boolean>(null)
+  /** 拼写模式里已经提示了几个字母 */
+  const [revealed, setRevealed] = useState(0)
 
   const start = (list: WordItem[]) => {
     setBatch(shuffle(list).slice(0, ROUND_SIZE))
@@ -46,6 +48,7 @@ export function QuizSheet({
     setResults([])
     setInput('')
     setJudged(null)
+    setRevealed(0)
   }
 
   useEffect(() => {
@@ -73,12 +76,13 @@ export function QuizSheet({
     if (!current || judged !== null) return
     setJudged(ok)
     setResults((prev) => [...prev, ok])
-    actions.rateWord(current.id, ok)
+    actions.rateWord(current.id, ok ? 4 : 1)
   }
 
   const next = () => {
     setJudged(null)
     setInput('')
+    setRevealed(0)
     setIndex((i) => i + 1)
   }
 
@@ -111,6 +115,7 @@ export function QuizSheet({
                 setMode('spell')
                 setJudged(null)
                 setInput('')
+                setRevealed(0)
               }}
             >
               拼写
@@ -123,6 +128,7 @@ export function QuizSheet({
                 setMode('choice')
                 setJudged(null)
                 setInput('')
+                setRevealed(0)
               }}
             >
               看词选义
@@ -137,9 +143,25 @@ export function QuizSheet({
                 <div className="card-sub" style={{ marginTop: 6 }}>
                   {current.meaning || current.group || '听发音，拼出这个词'}
                 </div>
-                <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={() => speakWord(current.word)}>
-                  <Icon name="sound" size={15} /> 播放发音
-                </button>
+                {/* 词长提示：没提示的字母显示成 · */}
+                <div className="spell-hint" style={{ marginTop: 8 }}>
+                  {current.word
+                    .split('')
+                    .map((ch, i) => (i < revealed ? ch : '·'))
+                    .join(' ')}
+                </div>
+                <div className="row" style={{ gap: 6, marginTop: 10, justifyContent: 'center' }}>
+                  <button className="btn btn-sm" onClick={() => speakWord(current.word)}>
+                    <Icon name="sound" size={15} /> 发音
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    disabled={judged !== null || revealed >= current.word.length - 1}
+                    onClick={() => setRevealed((r) => r + 1)}
+                  >
+                    提示一个字母
+                  </button>
+                </div>
               </div>
               <input
                 className="input"
@@ -147,7 +169,7 @@ export function QuizSheet({
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                placeholder="拼出这个词，回车提交"
+                placeholder="看中文释义，拼出这个英文单词"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -160,6 +182,15 @@ export function QuizSheet({
                 </button>
               ) : (
                 <div className="stack" style={{ gap: 8 }}>
+                  {judged === false ? (
+                    <div className="spell-diff">
+                      {current.word.split('').map((ch, i) => (
+                        <span key={i} className={input.trim().toLowerCase()[i] === ch ? 'ok' : 'bad'}>
+                          {ch}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="muted" style={{ fontSize: 13 }}>
                     {judged ? '对了。' : `不对，正确答案是 ${current.word}。`}
                     {current.meaning ? `　${current.meaning}` : ''}

@@ -28,6 +28,10 @@ import {
 } from '../core/files'
 import { isHabitCreationLocked, reconcileSupervision } from '../core/supervision'
 import { createInitialData, normalizeData, PLAN_KEEP_DAYS, REVIEW_INTERVALS } from '../core/store-model'
+import { sm2Rate } from '../core/sm2'
+import { checkAchievements } from '../core/stats'
+import { drawGacha } from '../core/stats'
+import { notifyFocusDone } from '../core/nativeNotify'
 import { addDays, todayKey } from '../core/date'
 import { uid } from '../core/id'
 import type {
@@ -54,6 +58,7 @@ export interface NewHabitInput {
   targetPerDay: number
   schedule: Habit['schedule']
   note?: string
+  preferredSlot?: Habit['preferredSlot']
 }
 
 export interface NewStudyInput {
@@ -88,6 +93,8 @@ export interface StoreActions {
   updateHabit: (id: string, patch: Partial<Habit>) => void
   setHabitArchived: (id: string, archived: boolean) => void
   removeHabit: (id: string) => void
+  /** 标记 / 取消标记休息日：既不算完成也不算断签 */
+  toggleRestDay: (habitId: string, date: DateKey) => void
 
   startTimer: (mode: TimerMode, plannedSeconds: number, subject?: string) => void
   pauseTimer: () => void
@@ -144,8 +151,8 @@ export interface StoreActions {
   /** 标记认识/不认识；不认识会顺手累一次复习计数 */
   setWordFamiliar: (id: string, familiar: 0 | 1) => void
   setWordsFamiliar: (ids: string[], familiar: 0 | 1) => void
-  /** 学一个词：认识就按 1/3/7/15/30 天排下一轮复习，不认识进错词本、今天继续出现 */
-  rateWord: (id: string, known: boolean) => void
+  /** 学一个词：SM-2 四档评分（重来1/困难3/良好4/简单5）；低于 3 分进错词本、今天继续出现 */
+  rateWord: (id: string, quality: number) => void
   /** 手动移出 / 放回错词本 */
   setWordWrong: (id: string, wrong: boolean) => void
   /** 整组改名，to 留空表示移到未分组 */
@@ -406,7 +413,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const update = useCallback((fn: (draft: AppData) => AppData) => {
-    setData((prev) => fn(structuredClone(prev)))
+    setData((prev) => {
+      const draft = structuredClone(prev)
+      const next = fn(draft)
+      // 每次数据变动后跑一遍成就检查，新解锁的徽章自动挂上去
+      const newly = checkAchievements(next)
+      if (newly.length > 0) {
+        next.achievements = [...(next.achievements ?? []), ...newly]
+      }
+      return next
+    })
   }, [])
 
   // 每天对账：把漏做的份额滚成欠账，连续断签则生成补救任务
@@ -471,9 +487,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const item = d.plans.flatMap((p) => p.items).find((i) => i.id === t.planItemId)
         if (item) item.done = true
       }
+      // 专注扭蛋：≥15 分钟算一次，往 focusGacha 里塞一个随机 emoji 标识
+      if (session.minutes >= 15) {
+        const g = drawGacha()
+        d.focusGacha = [...(d.focusGacha ?? []), `${g.emoji}${g.id}`]
+      }
       const nextRound = d.timer.round + 1
       const isLong = nextRound % d.settings.pomodoro.rounds === 1 && nextRound > 1
       const breakMin = isLong ? d.settings.pomodoro.longBreak : d.settings.pomodoro.shortBreak
+      // 专注结束即时震动 + 铃声 + 通知横幅（静默失败，不阻塞主流程）
+      void notifyFocusDone(
+        session.minutes,
+        t.subject,
+        isLong ? 'longBreak' : 'shortBreak',
+      )
       d.timer = {
         running: false,
         mode: 'break',
@@ -503,7 +530,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<StoreActions>(() => {
     const touchLog = (d: AppData, habitId: string, date: DateKey, count: number) => {
       const idx = d.habitLogs.findIndex((l) => l.habitId === habitId && l.date === date)
-      // 补今天以前的打卡算「补录」，不进连续天数
+      // 补今天以前的打卡算「补录」，不进连续天数；今天打的卡记录时间戳给高效时段用
       const backfill = date !== todayKey()
       if (count <= 0) {
         if (idx >= 0) d.habitLogs.splice(idx, 1)
@@ -512,7 +539,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (idx >= 0) {
         d.habitLogs[idx].count = count
         d.habitLogs[idx].backfill = backfill || undefined
-      } else d.habitLogs.push({ habitId, date, count, backfill: backfill || undefined })
+        if (!backfill) d.habitLogs[idx].markedAt = new Date().toISOString()
+      } else {
+        d.habitLogs.push({
+          habitId,
+          date,
+          count,
+          backfill: backfill || undefined,
+          markedAt: backfill ? undefined : new Date().toISOString(),
+        })
+      }
     }
 
     return {
@@ -557,7 +593,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             createdAt: todayKey(),
             archived: false,
             sort: d.habits.length,
+            preferredSlot: input.preferredSlot,
           })
+          return d
+        })
+      },
+      toggleRestDay(habitId, date) {
+        update((d) => {
+          const idx = d.habitLogs.findIndex((l) => l.habitId === habitId && l.date === date)
+          if (idx >= 0) {
+            const log = d.habitLogs[idx]
+            if (log.restDay) {
+              // 取消休息日：如果这天有打卡就保留打卡，没打卡就删整条
+              if (log.count === 0) d.habitLogs.splice(idx, 1)
+              else log.restDay = false
+            } else {
+              log.restDay = true
+            }
+          } else {
+            d.habitLogs.push({ habitId, date, count: 0, restDay: true })
+          }
           return d
         })
       },
@@ -1005,8 +1060,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             w.stage = REVIEW_INTERVALS.length
             w.nextReviewAt = undefined
           } else {
-            // 重学：从今天重新排队，仍在错词本里
+            // 重学：从今天重新排队，仍在错词本里；EF 保留，间隔清零
             w.stage = 0
+            w.interval = 0
             w.reviewCount += 1
             w.nextReviewAt = todayKey()
           }
@@ -1026,6 +1082,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               w.nextReviewAt = undefined
             } else {
               w.stage = 0
+              w.interval = 0
               w.reviewCount += 1
               w.nextReviewAt = today
             }
@@ -1033,28 +1090,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return d
         })
       },
-      rateWord(id, known) {
+      /** 学一个词：SM-2 动态间隔——按四档评分拉开复习，低于 3 分 EF 下调、今天重来并进错词本 */
+      rateWord(id, quality) {
         update((d) => {
           const w = d.words.find((x) => x.id === id)
           if (!w) return d
           const today = todayKey()
           const isReview = w.stage > 0
-          if (known) {
-            w.stage = Math.min(w.stage + 1, REVIEW_INTERVALS.length)
+          const r = sm2Rate(w, quality)
+          w.stage = r.stage
+          w.interval = r.interval
+          w.easeFactor = r.easeFactor
+          w.familiar = r.familiar
+          w.nextReviewAt = r.nextReviewAt
+          if (quality >= 3) {
             w.wrong = false
-            if (w.stage >= REVIEW_INTERVALS.length) {
-              w.familiar = 1
-              w.nextReviewAt = undefined
-            } else {
-              w.familiar = 0
-              w.nextReviewAt = addDays(today, REVIEW_INTERVALS[w.stage - 1])
-            }
           } else {
-            w.familiar = 0
-            w.stage = 0
             w.reviewCount += 1
             w.wrong = true
-            w.nextReviewAt = today
           }
           w.lastStudiedAt = today
           const p =
@@ -1065,6 +1118,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (isReview) p.reviewCount += 1
           else p.newCount += 1
           d.wordProgress = p
+          // 同步记进历史，统计页画周/月曲线用
+          let h = d.wordHistory.find((x) => x.date === today)
+          if (!h) {
+            h = { date: today, count: 0, newCount: 0, reviewCount: 0 }
+            d.wordHistory.push(h)
+            if (d.wordHistory.length > 400) d.wordHistory = d.wordHistory.slice(-400)
+          }
+          h.count += 1
+          if (isReview) h.reviewCount += 1
+          else h.newCount += 1
           return d
         })
       },

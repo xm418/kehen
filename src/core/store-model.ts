@@ -86,6 +86,9 @@ export function createInitialData(): AppData {
     documents: [],
     words: [],
     wordProgress: { date: now, count: 0, newCount: 0, reviewCount: 0 },
+    wordHistory: [],
+    achievements: [],
+    focusGacha: [],
     settings: { ...DEFAULT_SETTINGS },
     timer: {
       running: false,
@@ -117,12 +120,23 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
     expenses: raw.expenses ?? [],
     guardLogs: raw.guardLogs ?? [],
     documents: raw.documents ?? [],
-    words: (raw.words ?? []).map((w) => ({
-      ...w,
+    words: (raw.words ?? []).map((w) => {
       // 旧数据没有复习阶段：已经标熟的直接算掌握，其余按新词排队
-      stage: typeof w.stage === 'number' ? w.stage : w.familiar === 1 ? REVIEW_INTERVALS.length : 0,
-      wrong: !!w.wrong,
-    })),
+      const stage = typeof w.stage === 'number' ? w.stage : w.familiar === 1 ? REVIEW_INTERVALS.length : 0
+      return {
+        ...w,
+        stage,
+        wrong: !!w.wrong,
+        // 旧数据没有 SM-2 字段：间隔按原阶段折算（比如第 3 轮 ≈ 7 天），EF 取默认值
+        interval:
+          typeof w.interval === 'number'
+            ? w.interval
+            : stage > 0
+              ? REVIEW_INTERVALS[Math.min(stage, REVIEW_INTERVALS.length) - 1]
+              : 0,
+        easeFactor: typeof w.easeFactor === 'number' ? w.easeFactor : undefined,
+      }
+    }),
     wordProgress:
       raw.wordProgress && raw.wordProgress.date === todayKey()
         ? {
@@ -132,6 +146,12 @@ export function normalizeData(raw: Partial<AppData> | null): AppData {
             reviewCount: raw.wordProgress.reviewCount ?? 0,
           }
         : { date: todayKey(), count: 0, newCount: 0, reviewCount: 0 },
+    // 学词历史只留最近 400 天
+    wordHistory: (raw.wordHistory ?? [])
+      .filter((h) => h && typeof h.date === 'string' && typeof h.count === 'number')
+      .slice(-400),
+    achievements: Array.isArray(raw.achievements) ? raw.achievements : [],
+    focusGacha: Array.isArray(raw.focusGacha) ? raw.focusGacha : [],
     settings: {
       ...base.settings,
       ...(raw.settings ?? {}),

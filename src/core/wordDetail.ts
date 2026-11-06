@@ -1,4 +1,5 @@
 import { wordDetailLookup, type WordDetail } from './storage/cloudAdapter'
+import { offlineDetail } from './offlineDict'
 
 export type { WordDetail }
 
@@ -32,6 +33,11 @@ function writeCachedDetail(d: WordDetail) {
   }
 }
 
+/** 先看本机缓存，再看内置离线词库 —— 两者都算「立刻能拿到」，不需要转圈 */
+export function readLocalDetail(word: string): WordDetail | null {
+  return readCachedDetail(word) ?? offlineDetail(word)
+}
+
 /** 同一单词并发查询只发一次请求 */
 const pending = new Map<string, Promise<WordDetail | null>>()
 
@@ -40,8 +46,8 @@ export async function loadWordDetail(
   word: string,
 ): Promise<WordDetail | null> {
   const key = word.trim().toLowerCase()
-  const cached = readCachedDetail(key)
-  if (cached) return cached
+  const local = readLocalDetail(key)
+  if (local) return local
   const running = pending.get(key)
   if (running) return running
 

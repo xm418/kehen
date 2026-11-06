@@ -1,18 +1,42 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
-import { habitCountOn, habitDayProgress, habitStreak, isHabitDone, isHabitScheduled } from '../core/stats'
+import {
+  habitCountOn,
+  habitDayProgress,
+  habitHealthScore,
+  habitStreak,
+  habitResilience,
+  isHabitDone,
+  isHabitScheduled,
+} from '../core/stats'
 import { addDays, lastNDays, rangeKeys, startOfWeek } from '../core/date'
 import { Heatmap, Ring } from '../components/Charts'
 import { Sheet, Field, Segmented } from '../components/Sheet'
 import { Icon } from '../components/Icons'
 import { SupervisionPanel } from '../components/SupervisionPanel'
 import { isHabitCreationLocked } from '../core/supervision'
-import type { Habit, HabitSchedule } from '../core/types'
+import type { EnergySlot, Habit, HabitSchedule } from '../core/types'
 
 type Mode = 'daily' | 'weekdays' | 'weekly'
 const DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 0]
 const DAY_LABEL = ['日', '一', '二', '三', '四', '五', '六']
+
+const SLOT_OPTIONS: { value: EnergySlot; label: string; emoji: string }[] = [
+  { value: 'morning', label: '早起', emoji: '🌅' },
+  { value: 'midday', label: '中午', emoji: '☀️' },
+  { value: 'afternoon', label: '下午', emoji: '🍵' },
+  { value: 'evening', label: '睡前', emoji: '🌙' },
+  { value: 'any', label: '随便', emoji: '🔄' },
+]
+
+const SLOT_LABEL: Record<EnergySlot, string> = {
+  morning: '早起',
+  midday: '中午',
+  afternoon: '下午',
+  evening: '睡前',
+  any: '随便',
+}
 
 function modeOf(s: HabitSchedule): Mode {
   return s.type === 'daily' ? 'daily' : s.type === 'weekdays' ? 'weekdays' : 'weekly'
@@ -34,6 +58,7 @@ function HabitEditor({
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5])
   const [times, setTimes] = useState('3')
   const [note, setNote] = useState('')
+  const [slot, setSlot] = useState<EnergySlot>('any')
 
   useEffect(() => {
     if (!open) return
@@ -43,6 +68,7 @@ function HabitEditor({
     setDays(habit && habit.schedule.type === 'weekdays' ? habit.schedule.days : [1, 2, 3, 4, 5])
     setTimes(habit && habit.schedule.type === 'weekly' ? String(habit.schedule.times) : '3')
     setNote(habit?.note ?? '')
+    setSlot(habit?.preferredSlot ?? 'any')
   }, [open, habit])
 
   const submit = () => {
@@ -58,6 +84,7 @@ function HabitEditor({
       targetPerDay: Math.max(1, Number(target) || 1),
       schedule,
       note: note.trim() || undefined,
+      preferredSlot: slot === 'any' ? undefined : slot,
     }
     if (habit) actions.updateHabit(habit.id, payload)
     else actions.addHabit(payload)
@@ -128,6 +155,22 @@ function HabitEditor({
           </Field>
         ) : null}
 
+        <Field label="你的高效时段">
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {SLOT_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                className={`pill${slot === o.value ? ' active' : ''}`}
+                onClick={() => setSlot(o.value)}
+              >
+                {o.emoji} {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="card-sub">把难习惯放到你状态最好的时段，更容易坚持</div>
+        </Field>
+
         <Field label="备注（可选）">
           <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么想坚持它" />
         </Field>
@@ -189,6 +232,47 @@ export function HabitsPage() {
       ),
     }))
 
+  // 年度概览：把所有习惯合到一张 GitHub 式热力图，外加「全员完成」连续天数
+  const yearStats = useMemo(() => {
+    const days = lastNDays(365, today)
+    // null = 那天没有安排任何习惯，不算完美也不打断连续
+    const perfectDay = (key: string): boolean | null => {
+      const p = habitDayProgress(data.habits, data.habitLogs, key)
+      if (p.total === 0) return null
+      return p.doneCount >= p.total
+    }
+    const heat: { key: string; ratio: number }[] = []
+    let doneSum = 0
+    let totalSum = 0
+    for (const key of days) {
+      const p = habitDayProgress(data.habits, data.habitLogs, key)
+      doneSum += p.doneCount
+      totalSum += p.total
+      heat.push({ key, ratio: p.total === 0 ? 0 : p.doneCount / p.total })
+    }
+    // 今天还没全完成时从昨天开始数，避免连续天数提前归零
+    let current = 0
+    let cur = perfectDay(today) === true ? today : addDays(today, -1)
+    let guard = 0
+    while (cur >= days[0] && guard < 370) {
+      const p = perfectDay(cur)
+      if (p === true) current++
+      else if (p === false) break
+      cur = addDays(cur, -1)
+      guard++
+    }
+    let longest = 0
+    let run = 0
+    for (const key of days) {
+      const p = perfectDay(key)
+      if (p === true) {
+        run++
+        longest = Math.max(longest, run)
+      } else if (p === false) run = 0
+    }
+    return { heat, current, longest, rate: totalSum === 0 ? 0 : doneSum / totalSum }
+  }, [data.habits, data.habitLogs, today])
+
   return (
     <>
       <div className="row-between" style={{ marginBottom: 16 }}>
@@ -216,6 +300,29 @@ export function HabitsPage() {
 
       <SupervisionPanel compact />
 
+      {active.length > 0 ? (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <div className="row-between" style={{ marginBottom: 10, alignItems: 'flex-start' }}>
+            <div>
+              <h3 className="card-title">年度概览</h3>
+              <div className="card-sub">
+                全员完成连续 {yearStats.current} 天 · 最长 {yearStats.longest} 天 · 近一年打卡率{' '}
+                {Math.round(yearStats.rate * 100)}%
+              </div>
+            </div>
+          </div>
+          <Heatmap values={yearStats.heat} weeks={53} end={today} />
+          <div className="heat-legend">
+            少
+            <div className="heat-cell l1" style={{ display: 'inline-block' }} />
+            <div className="heat-cell l2" style={{ display: 'inline-block' }} />
+            <div className="heat-cell l3" style={{ display: 'inline-block' }} />
+            <div className="heat-cell l4" style={{ display: 'inline-block' }} />
+            多
+          </div>
+        </section>
+      ) : null}
+
       <div className="stack">
         {active.length === 0 ? (
           <div className="card">
@@ -226,7 +333,12 @@ export function HabitsPage() {
         {active.map((h) => {
           const streak = habitStreak(h, data.habitLogs, today)
           const rate = rateOf(h)
+          const res = habitResilience(h, data.habitLogs, today)
+          const health = habitHealthScore(h, data.habitLogs, today)
           const done = isHabitDone(h, data.habitLogs, today)
+          const isRestToday = data.habitLogs.some(
+            (l) => l.habitId === h.id && l.date === today && l.restDay,
+          )
           // 「每周几次」的连续单位是周，写死「天」会误导
           const streakUnit = h.schedule.type === 'weekly' ? '周' : '天'
           // 本周已经做满几次，让「每周几次」的习惯有明确进度
@@ -237,18 +349,34 @@ export function HabitsPage() {
                   0,
                 )
               : 0
+          const slotLabel = h.preferredSlot ? SLOT_LABEL[h.preferredSlot] : null
+          const resilienceColor = res.rate >= 80 ? 'var(--success)' : res.rate >= 40 ? 'var(--accent)' : 'var(--danger)'
           return (
             <section className="card" key={h.id}>
               <div className="row-between" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="row" style={{ gap: 8 }}>
+                  <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                     <h3 className="card-title">{h.name}</h3>
                     {done ? <span className="tag">今天已完成</span> : null}
+                    {slotLabel ? <span className="tag tag-ghost">⏰ {slotLabel}</span> : null}
                   </div>
                   <div className="card-sub">
                     {h.schedule.type === 'weekly' ? `本周 ${weekCount}/${h.schedule.times} 次 · ` : ''}
-                    连续 {streak.current} {streakUnit} · 最长 {streak.longest} {streakUnit} · 近 30 天完成率{' '}
-                    {Math.round(rate * 100)}%
+                    连续 {streak.current} {streakUnit} · 最长 {streak.longest} {streakUnit} · 健康度{' '}
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        color: health.score >= 80 ? 'var(--success)' : health.score >= 50 ? 'var(--accent)' : 'var(--danger)',
+                      }}
+                    >
+                      {health.score}%
+                      {health.trend === 'up' ? ' ↑' : health.trend === 'down' ? ' ↓' : ''}
+                    </span>{' '}
+                    ·{' '}
+                    <span style={{ color: resilienceColor, fontWeight: 600 }}>
+                      恢复率 {res.rate}%
+                    </span>
+                    {isRestToday ? ' · 今天标记为休息日 🛌' : ''}
                     {h.note ? ` · ${h.note}` : ''}
                   </div>
                 </div>
@@ -263,6 +391,14 @@ export function HabitsPage() {
                   onClick={() => actions.toggleHabit(h.id, today)}
                 >
                   {done ? '取消今天的打卡' : '打卡今天'}
+                </button>
+                <button
+                  className={`btn btn-sm${isRestToday ? ' btn-primary' : ''}`}
+                  style={isRestToday ? { background: 'var(--accent)', borderColor: 'var(--accent)' } : {}}
+                  onClick={() => actions.toggleRestDay(h.id, today)}
+                  title="今天不想做这件事？标成休息日，既不算完成也不算断签"
+                >
+                  {isRestToday ? '取消休息日' : '🛌 今天休息'}
                 </button>
                 <button
                   className="btn btn-sm"

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
-import { formatShort, weekdayLabel } from '../core/date'
+import { formatShort, lastNDays, weekdayLabel } from '../core/date'
 import { Sheet, Field } from '../components/Sheet'
+import { SparkBars } from '../components/Charts'
 import type { Expense, ExpenseType } from '../core/types'
 
 const EXPENSE_CATS = ['餐饮', '交通', '学习', '购物', '娱乐', '居住', '医疗', '其他']
@@ -82,6 +83,22 @@ export function BillsPage() {
     }
     return [...map.entries()].sort((a, b) => b[1] - a[1])
   }, [monthly])
+
+  /* 近 30 天逐日支出趋势（学钱迹）：看哪天最容易花超 */
+  const { dailyTrend, trendTotal } = useMemo(() => {
+    const byDay = new Map<string, number>()
+    for (const e of data.expenses) {
+      if (e.type !== 'expense') continue
+      byDay.set(e.date, (byDay.get(e.date) ?? 0) + e.amount)
+    }
+    const days = lastNDays(30, today)
+    const items = days.map((k, i) => ({
+      key: k,
+      value: Math.round((byDay.get(k) ?? 0) * 100) / 100,
+      label: i % 7 === 0 ? k.slice(5).replace('-', '/') : '',
+    }))
+    return { dailyTrend: items, trendTotal: items.reduce((a, d) => a + d.value, 0) }
+  }, [data.expenses, today])
 
   // 搜索只过滤下面的流水，不影响本月合计
   const shown = useMemo(() => {
@@ -302,6 +319,21 @@ export function BillsPage() {
           </div>
         </div>
       </section>
+
+      {dailyTrend.some((d) => d.value > 0) ? (
+        <section className="card" style={{ marginBottom: 12 }}>
+          <div className="card-head">
+            <div>
+              <h3 className="card-title">近 30 天支出趋势</h3>
+              <div className="card-sub">平均每天 ¥{money(trendTotal / 30)} · 哪几天最容易花超一眼可见</div>
+            </div>
+            <span className="num muted" style={{ fontSize: 12 }}>
+              ¥{money(trendTotal)}
+            </span>
+          </div>
+          <SparkBars items={dailyTrend} height={64} />
+        </section>
+      ) : null}
 
       {byCategory.length > 0 ? (
         <section className="card" style={{ marginBottom: 12 }}>

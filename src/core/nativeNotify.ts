@@ -9,6 +9,8 @@ export function isNativeApp(): boolean {
 }
 
 const CHANNEL_ID = 'kedu-reminder'
+/** 专注结束即时提醒：importance 5 + 震动 + 系统铃声 */
+const FOCUS_CHANNEL_ID = 'kedu-focus-done'
 
 /**
  * 通知 id 分段：
@@ -341,5 +343,64 @@ export async function notifyGuardHit(appName: string, label: string): Promise<vo
     })
   } catch (err) {
     console.error('破戒提醒发送失败', err)
+  }
+}
+
+const FOCUS_DONE_ID = 9100
+
+/**
+ * 专注段结束即时提醒：震动 + 系统默认铃声 + 通知横幅。
+ * App 在前台也弹（Android 上 Capacitor LocalNotifications 前台照样弹）。
+ * @param minutes 实际完成分钟数
+ * @param subject 专注的主题（可为空）
+ * @param nextMode 下一段是短休息还是长休息，用来决定文案
+ */
+export async function notifyFocusDone(
+  minutes: number,
+  subject?: string,
+  nextMode: 'shortBreak' | 'longBreak' = 'shortBreak',
+): Promise<void> {
+  if (!isNativeApp()) return
+  const { LocalNotifications } = await import('@capacitor/local-notifications')
+  try {
+    const perm = await LocalNotifications.checkPermissions()
+    if (perm.display !== 'granted') return
+
+    // 确保高优先级 channel 存在（importance 5 = 紧急 + 锁屏也弹 + 默认震动 + 铃声）
+    await LocalNotifications.createChannel({
+      id: FOCUS_CHANNEL_ID,
+      name: '专注结束',
+      description: '一段专注完成时提醒你',
+      importance: 5,
+      visibility: 1,
+      sound: 'default',
+    })
+
+    // 先取消上次还没滑掉的，避免重复
+    const pending = await LocalNotifications.getPending()
+    const old = pending.notifications.filter((n) => n.id === FOCUS_DONE_ID)
+    if (old.length) {
+      await LocalNotifications.cancel({ notifications: old.map((n) => ({ id: n.id })) })
+    }
+
+    const title = '🎉 专注完成！'
+    const body = subject
+      ? `${minutes} 分钟 · ${subject} · ${nextMode === 'longBreak' ? '长休一下' : '休息会儿再来'}`
+      : `${minutes} 分钟 · ${nextMode === 'longBreak' ? '长休一下' : '休息会儿再来'}`
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: FOCUS_DONE_ID,
+          title,
+          body,
+          channelId: FOCUS_CHANNEL_ID,
+          sound: 'default',
+        },
+      ],
+    })
+  } catch (err) {
+    // 静默失败：通知权限被关、channel 创建失败等都别让主流程崩
+    console.warn('notifyFocusDone failed', err)
   }
 }

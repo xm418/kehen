@@ -1,16 +1,56 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTodayKey } from '../hooks/useClock'
-import { weekMetrics, monthMetrics, planByDay, planDoneForGoal } from '../core/stats'
+import {
+  weekMetrics,
+  monthMetrics,
+  planByDay,
+  planDoneForGoal,
+  correlationAnalysis,
+  ACHIEVEMENTS,
+  type WeekMetrics,
+} from '../core/stats'
 import { addDays, formatShort, startOfWeek, relativeLabel, minutesToText, weekdayLabel } from '../core/date'
 import { Ring, ScoreDots, SparkBars } from '../components/Charts'
 import { Sheet, Field } from '../components/Sheet'
-import type { Goal } from '../core/types'
+import type { AppData, Goal } from '../core/types'
 
 function ratioOf(krs: Goal['krs']): number {
   if (krs.length === 0) return 0
   const sum = krs.reduce((a, k) => a + Math.min(1, k.target === 0 ? 0 : k.current / k.target), 0)
   return sum / krs.length
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100
+
+/** 学滴答清单：一键把本周数据拼成周报草稿，手动改两笔就能存 */
+function buildWeeklyDraft(data: AppData, m: WeekMetrics): string {
+  const weekEnd = addDays(m.weekStart, 6)
+  const lines: string[] = [`本周（${formatShort(m.weekStart)} — ${formatShort(weekEnd)}）`]
+  if (m.habitTotal > 0) lines.push(`· 习惯打卡 ${m.habitDone}/${m.habitTotal} 次，完成率 ${Math.round(m.habitRate * 100)}%`)
+  if (m.planTotal > 0) lines.push(`· 每日计划写了 ${m.planDays} 天，完成 ${m.planDone}/${m.planTotal} 条`)
+  if (m.focusSessions > 0) lines.push(`· 专注 ${m.focusSessions} 段，共 ${minutesToText(m.focusMinutes)}`)
+  if (m.studyCount > 0)
+    lines.push(
+      `· 学习记录 ${m.studyCount} 条，共 ${minutesToText(m.studyMinutes)}${m.reviewCount > 0 ? `，复习旧内容 ${m.reviewCount} 次` : ''}`,
+    )
+  const wordDays = data.wordHistory.filter((h) => h.date >= m.weekStart && h.date <= weekEnd)
+  const wordTotal = wordDays.reduce((a, h) => a + h.count, 0)
+  if (wordTotal > 0) {
+    const wordNew = wordDays.reduce((a, h) => a + h.newCount, 0)
+    lines.push(`· 单词学了 ${wordTotal} 个（新词 ${wordNew} · 复习 ${wordTotal - wordNew}）`)
+  }
+  const weekExpenses = data.expenses.filter((e) => e.type === 'expense' && e.date >= m.weekStart && e.date <= weekEnd)
+  if (weekExpenses.length > 0) {
+    const total = weekExpenses.reduce((a, e) => a + e.amount, 0)
+    const byCat = new Map<string, number>()
+    for (const e of weekExpenses) byCat.set(e.category, (byCat.get(e.category) ?? 0) + e.amount)
+    const [topCat, topVal] = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0]
+    lines.push(`· 支出 ¥${r2(total)}，大头是「${topCat}」¥${r2(topVal)}`)
+  }
+  if (m.avgScore !== null) lines.push(`· 每日自评平均 ${m.avgScore.toFixed(1)} 分`)
+  lines.push('', '做得好的：', '没做到的：', '下周改一件事：')
+  return lines.join('\n')
 }
 
 export function ReviewPage() {
@@ -26,6 +66,15 @@ export function ReviewPage() {
   const metrics = useMemo(() => weekMetrics(data, weekStart), [data, weekStart])
   const month = useMemo(() => monthMetrics(data, today), [data, today])
   const planTrend = useMemo(() => planByDay(data.plans, today, 14), [data.plans, today])
+  // 行为关联洞察：专注、学词、自评、习惯完成率之间的隐藏模式
+  const insights = useMemo(() => correlationAnalysis(data, 60), [data])
+  // 成就徽章解锁状态
+  const unlockedIds = new Set(data.achievements ?? [])
+  const achievementsWithState = useMemo(
+    () => ACHIEVEMENTS.map((a) => ({ ...a, unlocked: unlockedIds.has(a.id) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.achievements?.length, data.habits.length, data.sessions.length, data.words.length],
+  )
   const trendDays = planTrend.filter((d) => d.total > 0)
   const trendAvg = trendDays.length
     ? Math.round((trendDays.reduce((a, d) => a + d.rate, 0) / trendDays.length) * 100)
@@ -187,14 +236,28 @@ export function ReviewPage() {
         <hr className="divider" />
 
         <div className="stack">
-          <Field label="这周发生了什么">
+          <div>
+            <div className="row-between" style={{ marginBottom: 6 }}>
+              <span className="eyebrow">这周发生了什么</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  const draft = buildWeeklyDraft(data, metrics)
+                  // 已经写过内容就追加在后面，不覆盖手写的部分
+                  setSummary((s) => (s.trim() ? `${s.trimEnd()}\n\n${draft}` : draft))
+                }}
+              >
+                生成本周草稿
+              </button>
+            </div>
             <textarea
               className="textarea"
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="做得好的、没做到的、原因是什么"
             />
-          </Field>
+          </div>
           <Field label="下周改一件事">
             <textarea
               className="textarea"
@@ -210,6 +273,70 @@ export function ReviewPage() {
           >
             {savedWeek ? '更新本周复盘' : '保存本周复盘'}
           </button>
+        </div>
+      </section>
+
+      {insights.length > 0 ? (
+        <section className="card" style={{ marginBottom: 12 }}>
+          <div className="card-head">
+            <div>
+              <h3 className="card-title">你的生活模式</h3>
+              <div className="card-sub">过去 60 天数据之间的隐藏关联</div>
+            </div>
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            {insights.map((ins, idx) => (
+              <div
+                key={idx}
+                style={{
+                  padding: '10px 12px',
+                  background: 'var(--bg-elev)',
+                  borderRadius: 10,
+                  fontSize: 13.5,
+                  lineHeight: 1.7,
+                  borderLeft: '3px solid var(--accent)',
+                }}
+              >
+                {ins.text}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="card" style={{ marginBottom: 12 }}>
+        <div className="card-head">
+          <div>
+            <h3 className="card-title">成就徽章</h3>
+            <div className="card-sub">
+              已解锁 {achievementsWithState.filter((a) => a.unlocked).length} / {ACHIEVEMENTS.length}
+            </div>
+          </div>
+        </div>
+        <div
+          className="row"
+          style={{ gap: 10, flexWrap: 'wrap', marginTop: 8 }}
+        >
+          {achievementsWithState.map((a) => (
+            <div
+              key={a.id}
+              style={{
+                width: 84,
+                padding: '10px 6px',
+                textAlign: 'center',
+                opacity: a.unlocked ? 1 : 0.42,
+                filter: a.unlocked ? 'none' : 'grayscale(0.8)',
+                borderRadius: 10,
+                border: a.unlocked ? '1px solid var(--accent)' : '1px solid var(--border)',
+                background: a.unlocked ? 'var(--bg-elev)' : 'transparent',
+              }}
+              title={a.desc}
+            >
+              <div style={{ fontSize: 26 }}>{a.icon}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 4, lineHeight: 1.3 }}>{a.title}</div>
+              <div className="card-sub" style={{ fontSize: 10, marginTop: 2 }}>{a.desc}</div>
+            </div>
+          ))}
         </div>
       </section>
 

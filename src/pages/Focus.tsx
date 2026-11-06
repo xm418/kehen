@@ -1,9 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { useTimerSeconds, useTodayKey } from '../hooks/useClock'
-import { focusByDay, focusMinutesOn, isCleanSession, sessionDate } from '../core/stats'
-import { addDays, formatShort, timeToText, weekdayLabel, minutesToText } from '../core/date'
-import { SparkBars, BarList } from '../components/Charts'
+import {
+  focusByDay,
+  focusMilestoneMessage,
+  focusMinutesOn,
+  isCleanSession,
+  sessionDate,
+  GACHA_POOL,
+  type GachaItem,
+} from '../core/stats'
+import { addDays, formatShort, lastNDays, timeToText, weekdayLabel, minutesToText } from '../core/date'
+import { Heatmap, SparkBars, BarList } from '../components/Charts'
 import { FocusSupervisor } from '../components/SupervisorPet'
 import type { FocusSession, TimerMode } from '../core/types'
 
@@ -16,6 +24,27 @@ export function FocusPage() {
   const timer = data.timer
   const config = data.settings.pomodoro
   const isBreak = timer.mode === 'break'
+
+  /* 专注扭蛋 + 里程碑反馈：专注刚结束时弹一个 4 秒 toast */
+  const lastGachaLenRef = useRef<number>(data.focusGacha?.length ?? 0)
+  const [gachaToast, setGachaToast] = useState<{ item: GachaItem; milestone?: string } | null>(null)
+  useEffect(() => {
+    const cur = data.focusGacha?.length ?? 0
+    if (cur > lastGachaLenRef.current) {
+      const latest = data.focusGacha![cur - 1]
+      const id = latest.slice(2) // emoji 占 2 个 UTF-16 code unit 简化处理
+      const item =
+        GACHA_POOL.find((g) => `${g.emoji}${g.id}` === latest) ??
+        GACHA_POOL.find((g) => g.id === id) ??
+        GACHA_POOL[0]
+      const ms = focusMilestoneMessage(data.sessions, today)
+      setGachaToast({ item, milestone: ms?.title })
+      lastGachaLenRef.current = cur
+      const t = setTimeout(() => setGachaToast(null), 4200)
+      return () => clearTimeout(t)
+    }
+    lastGachaLenRef.current = cur
+  }, [data.focusGacha, data.sessions, today])
   const todaySessions = data.sessions
     .filter((s) => s.mode === 'focus' && sessionDate(s.startedAt) === today)
     .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1))
@@ -43,6 +72,27 @@ export function FocusPage() {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5)
+
+  /* 年度热力图 + 24 小时时段分布（学 Forest）：看长期节奏和高效时段 */
+  const { heatValues, yearTotal, heatPeak, hourItems } = useMemo(() => {
+    const byDay = new Map<string, number>()
+    const hours = new Array<number>(24).fill(0)
+    for (const s of data.sessions) {
+      if (s.mode !== 'focus') continue
+      const k = sessionDate(s.startedAt)
+      byDay.set(k, (byDay.get(k) ?? 0) + s.minutes)
+      hours[new Date(s.startedAt).getHours()] += s.minutes
+    }
+    // 峰值封顶 60 分钟起，免得前期数据少时颜色全是满格
+    const peak = Math.max(60, ...byDay.values())
+    const days = lastNDays(365, today)
+    return {
+      heatValues: days.map((k) => ({ key: k, ratio: (byDay.get(k) ?? 0) / peak })),
+      yearTotal: days.reduce((a, k) => a + (byDay.get(k) ?? 0), 0),
+      heatPeak: peak,
+      hourItems: hours.map((v, h) => ({ key: `h${h}`, value: v, label: h % 6 === 0 ? `${h}时` : '' })),
+    }
+  }, [data.sessions, today])
 
   const start = (mode: TimerMode, min: number) => {
     actions.startTimer(mode, min * 60, data.timer.subject)
@@ -260,6 +310,31 @@ export function FocusPage() {
         </section>
       </div>
 
+      {yearTotal > 0 ? (
+        <section className="card" style={{ marginTop: 12 }}>
+          <div className="card-head">
+            <div>
+              <h3 className="card-title">这一年的专注</h3>
+              <div className="card-sub">颜色越深当天越久 · 满格 ≈ {heatPeak} 分钟</div>
+            </div>
+            <span className="num muted" style={{ fontSize: 12 }}>
+              共 {minutesToText(yearTotal)}
+            </span>
+          </div>
+          <Heatmap values={heatValues} weeks={53} />
+
+          <hr className="divider" />
+
+          <div className="card-head">
+            <div>
+              <h3 className="card-title">一天里什么时候最专注</h3>
+              <div className="card-sub">按每段专注的开始时间累计，把难事放到高峰时段</div>
+            </div>
+          </div>
+          <SparkBars items={hourItems} height={64} />
+        </section>
+      ) : null}
+
       <section className="card" style={{ marginTop: 12 }}>
         <div className="card-head">
           <h3 className="card-title">今天的专注记录</h3>
@@ -329,6 +404,59 @@ export function FocusPage() {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {/* 专注扭蛋弹层：专注刚完成时从底部滑上来，4 秒自动消失 */}
+      {gachaToast ? (
+        <div
+          style={{
+            position: 'fixed',
+            left: 16,
+            right: 16,
+            bottom: 80,
+            zIndex: 999,
+            animation: 'slideUp 0.35s ease-out',
+          }}
+          onClick={() => setGachaToast(null)}
+        >
+          <div
+            style={{
+              background: 'var(--bg-elev)',
+              borderRadius: 14,
+              padding: '14px 16px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.16)',
+              border: `1px solid ${
+                gachaToast.item.rarity === 'epic'
+                  ? 'var(--accent)'
+                  : gachaToast.item.rarity === 'rare'
+                    ? 'rgba(100,180,255,0.4)'
+                    : 'var(--border)'
+              }`,
+            }}
+          >
+            {gachaToast.milestone ? (
+              <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, marginBottom: 4 }}>
+                🎉 {gachaToast.milestone}
+              </div>
+            ) : null}
+            <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+              <div style={{ fontSize: 36, lineHeight: 1 }}>{gachaToast.item.emoji}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>
+                  {gachaToast.item.name}
+                  {gachaToast.item.rarity === 'epic'
+                    ? ' ✨'
+                    : gachaToast.item.rarity === 'rare'
+                      ? ' ★'
+                      : ''}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2, lineHeight: 1.5 }}>
+                  {gachaToast.item.desc}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   )
